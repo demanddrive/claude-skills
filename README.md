@@ -13,18 +13,30 @@ instead of reinventing the process each time.
 
 ## Using a skill
 
-**In Claude Code**, skills are discovered from directories Claude Code is configured to
-load. Two easy options:
+**These skills auto-load when you run Claude Code from inside this repo.** Claude Code
+discovers skills in `.claude/skills/`, and this repo keeps that folder populated via
+symlinks back to `skills/<name>/` (so there's only one real copy to maintain). Clone the
+repo, open Claude Code in it, and the skills are available — no setup.
 
-- **Symlink into your personal skills dir** (available in every session):
-  ```bash
-  ln -s "$(pwd)/skills/redirect-sheet-creator" ~/.claude/skills/redirect-sheet-creator
-  ```
-- **Or copy it** into `~/.claude/skills/` (no live updates when the repo changes).
+```bash
+git clone <repo-url> && cd <repo>
+# ...run Claude Code here; skills are already discoverable.
+```
 
-Once discovered, just describe the task — Claude picks up the skill from its description.
-You can also invoke one explicitly with `/redirect-sheet-creator` if it's registered as a
-command in your setup.
+To describe the task in plain language is enough — Claude triggers a skill from its
+description. You can also invoke one explicitly by name, e.g. `/redirect-sheet-creator`.
+
+**To use a skill outside this repo** (in your other projects), symlink it into your
+personal skills dir so it's available in every session:
+
+```bash
+ln -s "$(pwd)/skills/redirect-sheet-creator" ~/.claude/skills/redirect-sheet-creator
+```
+
+> **Note on symlinks:** the `.claude/skills/` entries are git-tracked symlinks. On Windows,
+> or if you cloned with symlink support disabled, they may not resolve — enable symlinks
+> (`git config core.symlinks true` and re-checkout) or copy `skills/<name>/` into
+> `.claude/skills/` manually.
 
 Each skill's own `README.md` documents what it does; the real instructions Claude follows
 live in that skill's `SKILL.md`.
