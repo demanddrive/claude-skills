@@ -1,0 +1,50 @@
+{
+  "skill_name": "redirect-sheet-creator",
+  "evals": [
+    {
+      "id": 0,
+      "name": "live-migration-real-example",
+      "prompt": "We're relaunching Yale Cordage. Production is https://www.yalecordage.com/ and the new build is on staging at https://yalecordage.wpenginepowered.com/. Build me a 301 redirect sheet so none of our current URLs 404 at launch — point the redirects at the staging URL for now so we can test them there.",
+      "expected_output": "An .xlsx workbook plus a flat source->target CSV. Every production PAGE URL is accounted for; asset URLs (images, wp-content) are excluded. Identical-path URLs are marked 'no redirect needed' and kept OUT of the export CSV. Renamed/moved pages (e.g. /featured-industries/* -> /industry/*) are matched by meaning and flagged on a Review sheet. Validation reports zero loops/chains. Destinations use the staging domain.",
+      "files": [],
+      "assertions": [
+        {"text": "Produces an .xlsx workbook and a flat CSV export"},
+        {"text": "Fetched both live sitemaps and reports a production page count (not zero) with assets excluded"},
+        {"text": "Identical-path URLs are excluded from the final export CSV (no /x -> /x self-redirects)"},
+        {"text": "At least one renamed/moved page is matched to a semantically-correct new-site path and flagged for review"},
+        {"text": "Reports loop/chain validation results explicitly"},
+        {"text": "Export destinations point at the staging domain (yalecordage.wpenginepowered.com)"}
+      ]
+    },
+    {
+      "id": 1,
+      "name": "offline-fixture-renames-and-patterns",
+      "prompt": "I have two URL lists from a site migration — the current site and the new staging build. They're at evals/fixtures/prod_urls.txt and evals/fixtures/new_urls.txt (relative to the skill directory). Some pages were renamed (about-us became company, team-members became team). Build the redirect sheet targeting https://acmegear.wpenginepowered.com and make sure there are no redirect loops. Tell me which rows I need to review.",
+      "expected_output": "Uses the provided files (no live fetch needed). Six identical-path URLs (/, three /products/*, /contact, /support/warranty) are marked unchanged and excluded from the export. Three renames matched semantically: /about-us->/company, /team-members->/team, /featured-industries/marine->/industry/marine. /blog/2019/discontinued-post falls back to /blog. A provably-safe /products/* pattern is offered. Zero loops/chains. Review sheet lists the 4 judgment rows.",
+      "files": ["evals/fixtures/prod_urls.txt", "evals/fixtures/new_urls.txt"],
+      "assertions": [
+        {"text": "Uses the provided URL-list files instead of fetching live sitemaps"},
+        {"text": "The three renamed pages map correctly: about-us->company, team-members->team, featured-industries/marine->industry/marine"},
+        {"text": "/blog/2019/discontinued-post falls back to nearest parent /blog"},
+        {"text": "The six identical-path URLs are excluded from the export CSV"},
+        {"text": "A provably-safe /products/* pattern is proposed on the Pattern Redirects sheet"},
+        {"text": "Validation reports zero loops and zero chains"},
+        {"text": "The Review sheet lists exactly the rename + fallback rows for human confirmation"}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "indirect-phrasing-no-301-keyword",
+      "prompt": "We just moved our whole website to a new WordPress theme and it's live on staging now. I need to compare our old sitemap to the new one and make sure every old page points somewhere sensible on the new site so we don't lose our Google rankings when we go live. Old site: https://www.yalecordage.com/  New site on staging: https://yalecordage.wpenginepowered.com/  Can you make me a spreadsheet? Point everything at the staging site.",
+      "expected_output": "The skill triggers even though the user never said '301' or 'redirect sheet'. Produces the same workbook + CSV as eval 0, correctly interpreting 'point every old page somewhere sensible' as the redirect-mapping task, with renames flagged for review and loop/chain validation.",
+      "files": [],
+      "assertions": [
+        {"text": "The redirect-sheet-creator skill is invoked despite no explicit '301'/'redirect' keyword"},
+        {"text": "Produces an .xlsx workbook and a flat CSV export"},
+        {"text": "Every production page is accounted for and identical-path URLs are excluded from the export"},
+        {"text": "Renamed pages are matched by meaning and flagged for review"},
+        {"text": "Loop/chain validation results are reported"}
+      ]
+    }
+  ]
+}

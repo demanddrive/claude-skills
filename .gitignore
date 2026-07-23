@@ -1,0 +1,21 @@
+# Skill eval run outputs (large, regenerated on each run) — kept out of the repo.
+# The reproducible inputs live in each skill's evals/ directory instead.
+*-workspace/
+skills/*/evals/**/outputs/
+feedback.json
+benchmark.json
+benchmark.md
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+
+# Local Claude Code settings (machine-specific)
+.claude/settings.local.json
