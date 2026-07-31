@@ -1,193 +1,136 @@
 ---
 name: redirect-sheet-creator
-description: >-
-  Build a 301 redirect sheet that maps every URL on a current/production website onto a
-  new or staging version of that site, so nothing 404s at launch. Use this whenever the
-  user is doing a website migration, relaunch, or replatform and mentions redirects, a
-  redirect sheet/map/plan, 301s, matching an old sitemap to a new one, or making sure
-  production URLs don't break on a staging site. Trigger it even when they don't say
-  "301" — phrases like "map the old site to the new site", "we're relaunching and need to
-  point the old pages somewhere", "compare two sitemaps", or "make sure our URLs redirect
-  to staging" all mean this skill. Produces an Excel workbook plus a flat source→target
-  CSV, and validates in code that there are no redirect loops or chains.
+description: Build a 301 redirect sheet that maps every URL on a current/production website onto a new or staging version of that site
+disable-model-invocation: true
 ---
 
 # Redirect Sheet Creator
 
-## What this does and why
+`scripts/build_redirect_sheet.py` owns everything deterministic — fetching sitemaps,
+normalizing URLs, exact-matching, the safety rules, loop/chain validation, the workbook.
+It runs in two passes and hands you the **leftovers**: the production URLs with no exact
+match. Those are the only rows needing judgment, and they're your job.
 
-When a site is relaunched on a new platform (or a staging build becomes the new
-production), every URL that currently ranks in Google or is linked from elsewhere must
-land somewhere sensible on the new site. Missing even a handful causes 404s, lost SEO,
-and broken inbound links. This skill builds the redirect map that prevents that.
+You supply two things the script cannot:
 
-The work splits cleanly into two kinds:
+1. **Vanity URLs** — ask the user; no crawl finds them.
+2. **Semantic renames** — `/about-us` is the new `/company`. The script refuses to guess
+   this, because character similarity is confidently wrong exactly here.
 
-- **Deterministic, must-never-be-eyeballed** — fetching sitemaps, normalizing URLs,
-  exact-matching paths, detecting redirect loops/chains, building the workbook. A human
-  or a model glancing at 800 URLs *will* make mistakes here. So a Python script owns it:
-  `scripts/build_redirect_sheet.py`.
-- **Judgment** — figuring out that `/about-us` on the old site is the `/company` page on
-  the new one (a *renamed* page). Character-matching gets this wrong confidently, which
-  is dangerous on a redirect sheet. So the script hands you *only the leftovers* — the
-  URLs with no exact match — and you reason about them semantically, using page titles.
+## Gather these
 
-Every judgment call lands on a **Review sheet** flagged for a human to confirm. The skill
-never silently guesses its way into the authoritative redirect list.
+1. **Production URL** — the current live site.
+2. **New/staging URL** — the new build to match against.
+3. **Target base URL** — what destinations point at. Ask; default to the staging URL.
 
-## Before you start — gather these
+If a sitemap can't be fetched (gated, blocked, incomplete), ask for a URL list or
+`sitemap.xml` file and use `--prod-file` / `--new-file`.
 
-1. **Production URL** — the current live site (e.g. `https://www.yalecordage.com/`).
-2. **New/staging URL** — the new build whose sitemap you'll match against
-   (e.g. `https://yalecordage.wpenginepowered.com/`).
-3. **Target base URL** — what the redirect destinations should point at. Usually the
-   staging URL (redirects are tested on staging before go-live). Ask the user; default to
-   the staging URL they gave.
+## Always ask about vanity URLs
 
-If either sitemap can't be fetched (gated, blocked, incomplete), ask the user for a URL
-list or a `sitemap.xml` file and use `--prod-file` / `--new-file` instead.
+A sitemap only lists pages the CMS knows about, never the hand-made shortlinks printed on
+business cards, trade-show banners, and QR codes — where a 404 is most expensive and
+slowest to discover. The user is the only source. **Ask before Pass 1:**
 
-## Workflow
+> Are there any vanity or campaign redirects I should worry about? These never show up in
+> a sitemap, so I can't find them on my own — things like `/promo`, `/webinar`, `/qr`,
+> print or email shortlinks, or redirects someone added by hand in your redirect plugin
+> or server config. Paste whatever you've got and I'll fold them in.
 
-The script runs in **two passes** with your semantic matching in between.
+Take whatever form the answer arrives in — inline paths, full URLs, a messy pasted list,
+an exported plugin CSV, or "none." Normalization and dedup are handled, including
+scheme-less input like `www.example.com/promo`. **You** turn the answer into arguments:
+a handful go inline (`--vanity /promo /webinar`); a long list you write to a file yourself
+and pass `--vanity-file ./vanity.txt`. Don't make the user create that file.
 
-### Pass 1 — exact match + emit the leftovers
+Nudge them to check the existing redirect plugin / `.htaccess` / server rules — redirects
+already in place are the most commonly forgotten source and break silently at launch. If
+they say there are none, note that in your summary so it's on the record.
+
+## Pass 1 — exact match, emit leftovers
 
 ```bash
-python scripts/build_redirect_sheet.py \
+python3 scripts/build_redirect_sheet.py \
   --prod   https://www.example.com \
   --new    https://newsite.example.com \
   --target https://newsite.example.com \
   --out    ./redirects.xlsx \
-  --emit-unmatched ./unmatched.json
+  --emit-unmatched ./unmatched.json \
+  --vanity /promo /webinar            # omit if none
 ```
 
-This fetches both sitemaps (following sitemap-index files), exact-matches every
-production path against the new site (ignoring trailing slashes; query params are
-passthrough and don't affect matching), and writes `unmatched.json` — the production URLs
-with **no** exact match, plus every new-site path as a candidate. Page `<title>`s are
-fetched (in parallel) for both sides so you can judge renames by meaning, and cached in
-`unmatched.titles.json`.
+Writes `unmatched.json`: the unmatched production URLs plus every new-site path as a
+candidate, with page titles fetched for both sides. If there are **zero** unmatched URLs,
+go straight to Pass 2.
 
-If there are **zero** unmatched URLs, skip to Pass 2 directly (no resolution needed).
+## Your step — resolve renames by meaning
 
-### Your step — resolve renames semantically
+Read `unmatched.json`. For each unmatched source:
 
-Read `unmatched.json`. For each unmatched source, decide its destination:
+- **Renamed/moved page** → pick the best new-site path *by meaning*, using slug and title.
+  `/about-us` ("Our Story") → `/company` ("About the Company").
+- **Genuinely gone**, no replacement → `method: "gone"`. Becomes an **HTTP 410**, which
+  tells Google the page was removed on purpose — better for SEO than bouncing users to the
+  homepage. Prefer this over forcing a weak match.
+- **Unsure** → leave `dest_path` empty and accept the fallback (nearest existing section,
+  else 410).
 
-- **It's a renamed/moved page** → pick the best new-site path *by meaning*, using the
-  slug and title. `/about-us` (title "Our Story") → `/company` (title "About the
-  Company"). Prefer a confident semantic match over a superficial string match.
-- **The page is genuinely gone** with no good replacement → set `method: "gone"`. It will
-  be suggested as an **HTTP 410 Gone** rather than a redirect. This is the right signal
-  for intentionally-removed pages (retired products, expired campaigns): it tells Google
-  the page is gone on purpose, which is better for SEO than bouncing users to the
-  homepage. Prefer `gone` over forcing a weak match.
-- **Unsure / no obvious equivalent** → leave `dest_path` empty. The script falls back to
-  the nearest existing *section* path (e.g. `/blog/gone-post` → `/blog`); if no section
-  above it exists either, it suggests `410 Gone` instead of the homepage. Don't force a
-  weak match — the fallback is the safer default and it's flagged for review anyway.
-
-Write your decisions to `resolved.json`:
+Write `resolved.json`:
 
 ```json
 {
   "/about-us":      {"dest_path": "/company", "method": "renamed", "note": "Our Story page, renamed to Company"},
   "/team-members":  {"dest_path": "/team",    "method": "renamed", "note": "slug changed"},
   "/retired-widget":{"method": "gone",        "note": "product discontinued, no replacement"},
-  "/blog/gone":     {"dest_path": "",          "note": "unsure; accept fallback"}
+  "/blog/gone":     {"dest_path": "",         "note": "unsure; accept fallback"}
 }
 ```
 
-Only paths that exist in the new-site candidate list are accepted as `renamed`
-destinations; anything else falls back (a guard against hallucinated destinations).
+Destinations must exist in the new-site candidate list; anything invented is rejected and
+falls back. **Scaling up:** if the list is large (>150) and subagents are available, split
+it into chunks, dispatch one per chunk, and merge the partial `resolved.json` files. Each
+subagent needs only its slice plus the full `new_site_candidates` list.
 
-**Scaling up:** if the unmatched list is large (say >150 URLs) and subagents are
-available, split it into chunks and dispatch a subagent per chunk to produce partial
-`resolved.json` files, then merge them. Each subagent only needs its slice of `unmatched`
-plus the full `new_site_candidates` list. For typical migrations the list is small enough
-to resolve inline.
+## Pass 2 — fold in, validate, write
 
-### Pass 2 — fold decisions in, validate, write the workbook
+Same command plus `--resolved ./resolved.json`. **Keep the vanity flags on both passes** —
+Pass 2 rebuilds the map from the sitemaps rather than reading Pass 1's output, so dropping
+them here silently omits every vanity URL, and nothing downstream would flag it.
 
-```bash
-python scripts/build_redirect_sheet.py \
-  --prod   https://www.example.com \
-  --new    https://newsite.example.com \
-  --target https://newsite.example.com \
-  --out    ./redirects.xlsx \
-  --emit-unmatched ./unmatched.json \
-  --resolved ./resolved.json
-```
+Produces `redirects.xlsx`, the single deliverable. Two sheets:
 
-Same command as Pass 1 plus `--resolved`. This produces `redirects.xlsx` and a flat
-`redirects.export.csv`.
+- **`Redirects`** — the whole map, one row per production URL, everything editable in one
+  place. Two columns carry the weight:
+  - **`Import?`** — `yes` rows are the redirect rules. `no` rows are pages that didn't move
+    (source == destination), shown so every URL is visibly accounted for but excluded
+    because importing one would be a server self-loop.
+  - **`Review`** — `NEEDS JUDGMENT` (changed slug, section fallbacks, 410s) or
+    `HIGH CONFIDENCE` (same-slug subtree moves), blank when no review is needed. Rows are
+    sorted so judgment rows sit at the top. `Source Title`, `Destination Title`, and
+    `Notes` sit on the same row, so confirming a call and fixing it happen in one spot.
 
-## What the output contains
+  Optional **pattern suggestions** sit below the rows under their own heading — advisory
+  only, with both wildcard and regex forms. Don't import a pattern *and* the 1:1 rows it
+  covers; that installs duplicate rules.
+- **`Validation`** — counts (including the two review tiers) plus the loop/chain report.
 
-The workbook has five sheets, mirroring the team's existing template:
+A pattern is only ever suggested for a subtree that **moved** (`/featured-industries/*` →
+`/industry/*`). A subtree mapping to itself needs no rule, so no identity patterns appear.
 
-- **`1 to 1 Redirects`** — the working/reasoning sheet. Every production URL, its raw
-  destination path, and live Excel formulas that strip the domain off the source and
-  prepend the target base URL (kept in the editable `F1` cell — change `F1` to swap the
-  target domain without re-running). The `Match Method` column says how each row was
-  derived: `exact`, `renamed`, `parent-fallback`, or `unchanged (no redirect needed)`.
-- **`Export`** — the clean, flat, import-ready list: `Source Path` → full
-  `Destination URL`. **This is the file you actually import into the redirect plugin.**
-- **`Pattern Redirects`** — prefix rules that are *provably* safe (see below), or empty.
-- **`Review`** — the rows that need a human eye, split into two tiers so attention goes
-  where it matters: **NEEDS JUDGMENT** (renames whose slug changed, section fallbacks, and
-  410s — read these carefully) and **HIGH CONFIDENCE** (same-slug subtree moves like
-  `/featured-industries/marine` → `/industry/marine` — a quick sanity check). Source and
-  destination **page titles** are shown side by side so confirmation is a glance, not a
-  click-through.
-- **`Validation`** — counts by method and the loop/chain report.
+## Report back
 
-### The critical rule: unchanged URLs are NOT redirects
+State the headline numbers: total prod URLs, vanity URLs added by hand, how many were
+**unchanged** (no redirect needed — often the majority, and worth saying plainly since it
+reassures them most pages didn't move), real redirects, 410s, rows needing review, and any
+loops/chains.
 
-If a production path is *identical* to its new-site path (`/about` → `/about`), the page
-lives at the same URL on the new site. Writing a redirect rule for it would create a real
-self-loop on the server (`/about` → `/about` forever). So these rows are **shown on the
-reasoning sheet** (marked `unchanged (no redirect needed)`) but **excluded from the Export
-sheet and CSV**. Only genuine moves — renamed, relocated, fallback — become redirect
-rules. Tell the user this count explicitly; it's often the majority of URLs and reassures
-them that "most pages didn't move."
-
-### Validation: loops and chains
-
-The script walks the redirect graph over the *exported* redirects and flags:
-
-- **Loop** — `A → B → A`. The browser bounces forever.
-- **Chain** — `A → B → C`. The browser is redirected twice; each hop loses SEO value and
-  slows the page. Chains should be flattened so `A → C` directly.
-
-In a normal prod→new-site migration these are rare (destinations are new-site paths;
-sources are prod paths, so they seldom overlap), but the check is a cheap safety net. If
-any appear, surface them to the user before they import anything — the Validation sheet
-lists each one with its full path.
-
-## Pattern redirects — safe only
-
-Blanket prefix rules (`/blog/* → /articles/*`) are tempting but risky: one URL under the
-prefix that *doesn't* follow the pattern gets silently broken. The script therefore emits
-a pattern **only when it's provably safe** — i.e. *every* production URL under that prefix
-exact-maps to the same suffix under the same prefix, with no exceptions. Those go on the
-`Pattern Redirects` sheet as an optional optimization that would replace the individual
-1:1 rows they cover. If you want to propose a riskier pattern (e.g. a rename that applies
-to a whole subtree), describe it in that sheet's Notes and leave it for the user to
-approve — never fold an unproven pattern into the Export automatically.
-
-## Finishing up
-
-1. Report the headline numbers: total prod URLs, how many were unchanged (no redirect),
-   how many real redirects, how many were suggested as 410 Gone, how many need review,
-   and whether any loops/chains were found.
-2. Point the user at the **Review sheet** for the rows needing confirmation and the
-   **Export CSV** as the import-ready artifact.
-3. Remind them the redirects target the **staging** URL (via `F1`); for go-live they
-   either edit `F1` and re-export, or re-run with `--target` set to the production domain.
+Tell them to work the top of the **Redirects sheet** first — the `NEEDS JUDGMENT` rows are
+sorted there — and to filter `Import? = yes` for the list to import. Note that destinations
+point at whatever `--target` was set to (usually
+staging); switching to production means re-running with a new `--target` — cheap, and it
+reproduces the sheet if you keep the same `--resolved` and vanity URLs.
 
 ## Dependencies
 
-`openpyxl` (Excel output). Install with `python3 -m pip install openpyxl` if missing.
-Everything else uses the Python standard library.
+`openpyxl` — `python3 -m pip install openpyxl`. Everything else is stdlib.
+Run `./tests/test.sh` after changing the script.

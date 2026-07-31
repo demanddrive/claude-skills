@@ -9,7 +9,7 @@ instead of reinventing the process each time.
 
 | Skill | What it does |
 |-------|--------------|
-| [`redirect-sheet-creator`](skills/redirect-sheet-creator/) | Builds a 301 redirect sheet mapping a production sitemap onto a new/staging site for a migration — exact + semantic matching, loop/chain validation, Excel + CSV output. |
+| [`redirect-sheet-creator`](skills/redirect-sheet-creator/) | Builds a 301 redirect sheet mapping a production sitemap onto a new/staging site for a migration — exact + semantic matching, loop/chain validation, Excel workbook output. |
 
 ## Using a skill
 
@@ -49,7 +49,7 @@ skills/
     SKILL.md          # the skill itself (instructions Claude follows)
     scripts/          # helper scripts the skill calls
     assets/           # templates / reference files used in output
-    evals/            # test prompts + fixtures for validating the skill
+    tests/            # runnable regression tests + offline fixtures
     README.md         # human-facing overview
 ```
 
@@ -59,10 +59,17 @@ Skills are built and iterated with the `skill-creator` skill, which runs test ca
 opens a review viewer so you can see outputs before shipping changes. In short:
 
 1. Edit the skill under `skills/<name>/` (usually `SKILL.md` and/or its scripts).
-2. Re-run its evals (see the skill's `evals/evals.json` for the test prompts) to confirm
-   nothing regressed.
+2. Run its tests (`./tests/test.sh`) to confirm nothing regressed.
 3. Commit and open a PR.
 
-Eval **run outputs** are intentionally git-ignored (they're large and regenerated each
-run); only the reproducible inputs — `evals/evals.json` and `evals/fixtures/` — are
-committed, so anyone can re-run the tests.
+**Where a skill leans on a script, test the script.** A skill's real guarantees live in its
+code, so prefer a runnable `tests/test.sh` that exits nonzero on regression over prose
+describing intended behavior. Keep fixtures offline — tests that hit live third-party sites
+can't pass deterministically. Sanity-check a new assertion by breaking the guard it covers
+and confirming it fails; an assertion that never fails is worse than none, because it reads
+like coverage.
+
+Keep `SKILL.md` to what the model must decide. Rules the script already enforces don't need
+restating there — that prose goes stale against the code and costs context on every run.
+
+> `redirect-sheet-creator` follows this pattern.
