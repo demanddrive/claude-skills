@@ -10,9 +10,11 @@ This script owns the DETERMINISTIC work -- the parts a model should never eyebal
   * normalize URLs (ignore trailing slash; query params pass through, so they don't
     affect matching)
   * exact-match every production path against the new site
+  * merge in user-supplied vanity/campaign URLs no sitemap lists (--vanity/--vanity-file),
+    deduped against the sitemap and each other
   * fall back to nearest existing parent path when there's no match
   * detect redirect loops and chains via graph traversal
-  * write the .xlsx workbook + flat CSV export
+  * write the .xlsx workbook (one Redirects sheet, an Import? column marking the rules)
 
 It deliberately does NOT try to guess renamed pages (e.g. /about-us -> /company). Naive
 character similarity produces confident-but-wrong guesses on exactly those cases, which
@@ -30,10 +32,12 @@ Typical flow (two passes):
 
   # (model fills in ./resolved.json: {source_path: {dest_path, method, note}})
   # Pass 2: same command plus --resolved ./resolved.json to fold the decisions in.
+
+Pass --vanity/--vanity-file on BOTH passes when used: pass 2 rebuilds the map from sitemaps
+rather than from pass 1's output, so omitting it there drops those URLs silently.
 """
 
 import argparse
-import csv
 import gzip
 import json
 import re
@@ -281,7 +285,19 @@ def fetch_titles(urls, workers=6, pace=0.05):
 # --- Normalization -----------------------------------------------------------
 
 def to_path(url):
-    """Normalized path for matching: trailing slash ignored, query/fragment dropped."""
+    """Normalized path for matching: trailing slash ignored, query/fragment dropped.
+
+    Also tolerates scheme-less input like `www.example.com/promo`, which users paste
+    routinely when asked for vanity URLs. urlparse() reads that as an all-path relative
+    URL, which would otherwise become the literal source path `www.example.com/promo`
+    instead of `/promo`, so a leading host segment is stripped before parsing.
+    """
+    url = url.strip()
+    if not url.startswith("/") and "://" not in url:
+        # Bare host prefix (no scheme): drop it, keeping whatever path follows.
+        head = url.split("/", 1)
+        if "." in head[0] and " " not in head[0]:
+            url = "/" + head[1] if len(head) > 1 else "/"
     p = urlparse(url)
     path = p.path or "/"
     if len(path) > 1:
@@ -322,7 +338,7 @@ def match_exact(prod_urls, new_index):
         spath = to_path(src)
         if spath in new_index:
             rows.append({"source": src, "source_path": spath, "dest_path": spath,
-                         "method": "exact", "confidence": 1.0, "review": False,
+                         "method": "exact", "review": False,
                          "note": ""})
         else:
             unmatched.append((src, spath))
@@ -332,27 +348,71 @@ def match_exact(prod_urls, new_index):
 # --- Provably-safe patterns --------------------------------------------------
 
 def find_safe_patterns(rows):
-    """Emit a prefix rule ONLY when every source under /prefix/ exact-maps to the same
-    suffix under /prefix/. Anything less could silently break a URL, so it's skipped."""
-    by_prefix = defaultdict(list)
+    """Find subtree MOVES that a single prefix rule could express: every URL under
+    /old-prefix/ lands at the same suffix under a DIFFERENT /new-prefix/.
+
+    Only a move is worth a pattern. A subtree that maps to itself (/products/* ->
+    /products/*) needs no rule at all -- those pages didn't move, and emitting an identity
+    pattern would express the very self-redirect the export excludes. So source prefix ==
+    destination prefix is skipped.
+
+    Safety: a rule is emitted only when EVERY row under the prefix agrees on the same
+    destination prefix and preserves its suffix exactly, and no other row outside the group
+    shares the source prefix. One non-conforming URL disqualifies the whole prefix, because
+    a blanket rule would silently send it somewhere wrong.
+
+    Patterns are advisory -- the 1:1 rows remain the authoritative import. Returns dicts
+    carrying both a readable wildcard form and a ready-to-paste regex pair.
+    """
+    # Group by source prefix depth-first: try the deepest shared prefix first so
+    # /featured-industries/* wins over a shallower coincidence.
+    candidates = defaultdict(list)
     for r in rows:
         segs = [s for s in r["source_path"].split("/") if s]
-        if segs:
-            by_prefix["/" + segs[0]].append(r)
+        # A prefix needs at least one segment above the leaf to be a subtree.
+        for depth in range(1, len(segs)):
+            candidates["/" + "/".join(segs[:depth])].append(r)
 
     patterns = []
-    for prefix, group in sorted(by_prefix.items()):
-        if len(group) < 2:
+    claimed = set()  # source paths already covered by an emitted (deeper) pattern
+    for prefix in sorted(candidates, key=lambda p: (-p.count("/"), p)):
+        group = candidates[prefix]
+        if len(group) < 2 or any(r["source_path"] in claimed for r in group):
             continue
-        if all(r["method"] == "exact" and r["dest_path"] == prefix + r["source_path"][len(prefix):]
-               for r in group):
-            patterns.append({
-                "source_pattern": prefix + "/*",
-                "dest_pattern": prefix + "/*",
-                "count": len(group),
-                "notes": f"All {len(group)} URLs under {prefix}/ map identically. "
-                         f"Safe to collapse into one prefix rule.",
-            })
+        # Every row whose source lives under this prefix must be in the group -- otherwise
+        # a blanket rule would also catch the ones we didn't check.
+        under = [r for r in rows if r["source_path"].startswith(prefix + "/")]
+        if len(under) != len(group):
+            continue
+        # A 410 or a fallback has no suffix-preserving destination, so it can't pattern.
+        if any(r["method"] in ("gone", "parent-fallback") for r in group):
+            continue
+
+        dest_prefixes = set()
+        conforms = True
+        for r in group:
+            suffix = r["source_path"][len(prefix):]          # includes the leading "/"
+            if not r["dest_path"].endswith(suffix):
+                conforms = False
+                break
+            dest_prefixes.add(r["dest_path"][: -len(suffix)] or "/")
+        if not conforms or len(dest_prefixes) != 1:
+            continue
+
+        dest_prefix = dest_prefixes.pop()
+        if dest_prefix == prefix:
+            continue  # identity: these pages didn't move, so no rule is needed
+
+        patterns.append({
+            "source_pattern": prefix + "/*",
+            "dest_pattern": dest_prefix + "/*",
+            "source_regex": f"^{prefix}/(.*)$",
+            "dest_regex": f"{dest_prefix}/$1",
+            "count": len(group),
+            "notes": f"All {len(group)} URLs under {prefix}/ move to {dest_prefix}/ keeping "
+                     f"their slug. One rule could replace those {len(group)} 1:1 rows.",
+        })
+        claimed.update(r["source_path"] for r in group)
     return patterns
 
 
@@ -398,7 +458,8 @@ def validate(rows, same_domain=False):
 
 # --- Workbook output ---------------------------------------------------------
 
-def write_workbook(rows, patterns, issues, prod_urls, new_urls, target_base, out_path):
+def write_workbook(rows, patterns, issues, prod_urls, new_urls, target_base, out_path,
+                   vanity_added=0):
     import openpyxl
     from openpyxl.styles import Font, PatternFill
 
@@ -413,98 +474,107 @@ def write_workbook(rows, patterns, issues, prod_urls, new_urls, target_base, out
     warn = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
     grey = PatternFill(start_color="EFEFEF", end_color="EFEFEF", fill_type="solid")
 
-    ws = wb.active
-    ws.title = "1 to 1 Redirects"
-    ws["A1"], ws["B1"] = "Raw Source", "Raw Destination"
-    ws["C1"] = "Filtered Source Path (DO NOT EDIT)"
-    ws["D1"] = "Filtered Destination URL"
-    ws["E1"] = "Match Method"
-    ws["F1"] = target_base  # editable target base URL; the D-column formula references $F$1
-    ws["F1"].font = Font(bold=True, color="1155CC")
-    for c in "ABCDE":
-        ws[f"{c}1"].font = hdr
-    for i, r in enumerate(rows, start=2):
-        gone = r["method"] == "gone"
-        ws[f"A{i}"] = r["source"]
-        ws[f"B{i}"] = "" if gone else r["dest_path"]  # 410 rows have no destination URL
-        ws[f"C{i}"] = f'=IF(ISNUMBER(SEARCH("http", A{i})), MID(A{i}, FIND("/", A{i}, 9), LEN(A{i})), A{i})'
-        ws[f"D{i}"] = ("410 Gone" if gone else
-                       (f'=IF(OR($F$1="", B{i}=""), "", IF(ISNUMBER(SEARCH("http", B{i})), '
-                        f'$F$1 & MID(B{i}, FIND("/", B{i}, 9), LEN(B{i})), $F$1 & B{i}))'))
-        ws[f"E{i}"] = "unchanged (no redirect needed)" if r["no_redirect"] else r["method"]
-        if r["no_redirect"]:
-            for c in "ABCDE":
-                ws[f"{c}{i}"].fill = grey
-        elif r["review"]:
-            for c in "ABCDE":
-                ws[f"{c}{i}"].fill = warn
+    # ONE sheet carries the whole map: every row, with an Import? column saying which are
+    # rules and which aren't. Splitting 1:1 from Export meant maintaining two views of the
+    # same data and inviting a double-import; a single filterable sheet says it once.
+    #
+    # Import? is the operative column:
+    #   yes  -- a real redirect (or a 410). Import these.
+    #   no   -- source == destination: the page didn't move. Shown so every production URL
+    #           is visibly accounted for, but importing it would be a server self-loop.
+    # Review status is a COLUMN, not a separate sheet: the old Review sheet was a filtered
+    # view of these same rows, so a reviewer editing a destination had to remember to fix it
+    # in two places. Sort so the rows needing attention float to the top -- that's what the
+    # separate sheet was really buying, and a sort achieves it without duplicating data.
+    def review_tier(r):
+        if not r["review"]:
+            return ""
+        # A rename that KEEPS ITS SLUG (/featured-industries/marine -> /industry/marine) is a
+        # mechanical subtree move: quick sanity check. A changed slug, a section fallback, or
+        # a 410 is a real judgment call.
+        if r["method"] == "renamed" and slug(r["source_path"]) == slug(r["dest_path"]):
+            return "HIGH CONFIDENCE"
+        return "NEEDS JUDGMENT"
 
-    # Export: real redirects PLUS 410 rows (so the config removes dead pages properly).
-    # Identical-path (unchanged) rows are omitted so the imported config never contains a
-    # same-URL self-loop. A 410 row carries the literal directive "410 Gone" as its
-    # destination -- most redirect tools accept a status code there instead of a URL.
-    exp = wb.create_sheet("Export")
-    exp["A1"], exp["B1"] = "Source Path", "Destination URL / Status"
-    exp["A1"].font = exp["B1"].font = hdr
+    order = {"NEEDS JUDGMENT": 0, "HIGH CONFIDENCE": 1, "": 2}
+    rows = sorted(rows, key=lambda r: (order[review_tier(r)], r["source_path"]))
+
+    ws = wb.active
+    ws.title = "Redirects"
+    # No "Confidence" column: it was a constant per method (renamed=0.9, fallback=0.3,
+    # gone=0.0), so it restated Match Method as a number that LOOKED computed. A reviewer
+    # reading 0.9 would reasonably infer this particular rename scored well, when every
+    # rename got the same value. Match Method carries the real signal; Review carries the
+    # priority; Notes carries the reasoning.
+    cols = ["Source Path", "Destination URL / Status", "Import?", "Review", "Match Method",
+            "Source Title", "Destination Title", "Notes"]
+    for j, name in enumerate(cols):
+        ws.cell(row=1, column=j + 1, value=name).font = hdr
+    ws.freeze_panes = "A2"
     base = target_base.rstrip("/")
     export_pairs = []
-    ei = 2
+    ncols = len(cols)
+    i = 2
     for r in rows:
+        gone = r["method"] == "gone"
+        dest = "410 Gone" if gone else base + r["dest_path"]
+        importable = not r["no_redirect"]
+        tier = review_tier(r)
+        vals = [
+            r["source_path"],
+            dest,
+            "yes" if importable else "no",
+            tier,
+            "unchanged (no redirect needed)" if r["no_redirect"] else r["method"],
+            r.get("source_title", ""),
+            r.get("dest_title", ""),
+            r.get("note", ""),
+        ]
+        for j, v in enumerate(vals):
+            ws.cell(row=i, column=j + 1, value=v)
         if r["no_redirect"]:
-            continue
-        dest = "410 Gone" if r["method"] == "gone" else base + r["dest_path"]
-        exp[f"A{ei}"], exp[f"B{ei}"] = r["source_path"], dest
-        export_pairs.append((r["source_path"], dest))
-        ei += 1
+            for j in range(1, ncols + 1):
+                ws.cell(row=i, column=j).fill = grey
+        elif tier:
+            for j in range(1, ncols + 1):
+                ws.cell(row=i, column=j).fill = warn
+        if importable:
+            export_pairs.append((r["source_path"], dest))
+        i += 1
 
-    pat = wb.create_sheet("Pattern Redirects")
-    pat["A1"] = "Provably-safe pattern redirects"
-    pat["A1"].font = Font(bold=True, size=13)
-    pat["A2"] = ("Only patterns where EVERY production URL under the prefix maps identically "
-                 "are listed. Review before enabling -- they replace the 1:1 rows they cover.")
-    pat["A4"], pat["B4"], pat["C4"], pat["D4"] = "Source Pattern", "Destination Pattern", "URLs Covered", "Notes"
-    for c in "ABCD":
-        pat[f"{c}4"].font = hdr
-    for i, p in enumerate(patterns, start=5):
-        pat[f"A{i}"], pat[f"B{i}"], pat[f"C{i}"], pat[f"D{i}"] = (
-            p["source_pattern"], p["dest_pattern"], p["count"], p["notes"])
-
-    # Review sheet, tiered by confidence so a reviewer spends attention where it matters.
-    # A rename that KEEPS THE SAME SLUG (e.g. /featured-industries/marine -> /industry/marine)
-    # is a mechanical subtree move -- high confidence, quick sanity check. A rename whose
-    # slug changed, a parent-fallback, or a 410 is a real judgment call.
-    rev = wb.create_sheet("Review")
-    rev_cols = ["Source Path", "Source Title", "Proposed Destination", "Destination Title",
-                "Method", "Confidence", "Why flagged / Notes"]
-
-    def is_high_conf(r):
-        return (r["method"] == "renamed" and r["confidence"] >= 0.85
-                and slug(r["source_path"]) == slug(r["dest_path"]))
-
-    review_rows = [r for r in rows if r["review"]]
-    needs_judgment = [r for r in review_rows if not is_high_conf(r)]
-    high_conf = [r for r in review_rows if is_high_conf(r)]
-
-    def write_section(sheet, start_row, title, section_rows):
-        sheet.cell(row=start_row, column=1, value=title).font = Font(bold=True, size=12)
-        for j, name in enumerate(rev_cols):
-            sheet.cell(row=start_row + 1, column=j + 1, value=name).font = hdr
-        r0 = start_row + 2
-        for k, r in enumerate(section_rows):
-            dest_display = "410 Gone" if r["method"] == "gone" else r["dest_path"]
-            vals = [r["source_path"], r.get("source_title", ""), dest_display,
-                    r.get("dest_title", ""), r["method"], r["confidence"], r.get("note", "")]
+    # Optional pattern suggestions live BELOW the 1:1 rows, separated by a blank row and a
+    # heading, so the sheet reads top-to-bottom: authoritative rules first, then advice.
+    # They are NOT marked importable -- the 1:1 rows above already cover the same URLs, and
+    # importing both would install duplicate rules for one page.
+    i += 1
+    ws.cell(row=i, column=1,
+            value=f"OPTIONAL PATTERN SUGGESTIONS ({len(patterns)})").font = Font(bold=True, size=12)
+    i += 1
+    ws.cell(row=i, column=1, value=(
+        "Advisory only — do NOT import these alongside the rows above; each pattern would "
+        "duplicate the 1:1 rules it covers. Swap one in by hand only if you'd rather "
+        "maintain a single rule, and verify no URL under the prefix needs different "
+        "treatment. Only subtree MOVES appear here; a subtree that maps to itself needs no "
+        "rule at all."))
+    i += 1
+    pat_cols = ["Source Pattern", "Destination Pattern", "Source Regex", "Destination Regex",
+                "URLs Covered", "Notes"]
+    for j, name in enumerate(pat_cols):
+        ws.cell(row=i, column=j + 1, value=name).font = hdr
+    i += 1
+    if patterns:
+        for p in patterns:
+            vals = [p["source_pattern"], p["dest_pattern"], p["source_regex"],
+                    p["dest_regex"], p["count"], p["notes"]]
             for j, v in enumerate(vals):
-                sheet.cell(row=r0 + k, column=j + 1, value=v).fill = warn
-        return r0 + len(section_rows)
+                ws.cell(row=i, column=j + 1, value=v)
+            i += 1
+    else:
+        ws.cell(row=i, column=1,
+                value="No safe subtree moves found — the 1:1 rows above are the whole map.")
 
-    next_row = write_section(rev, 1,
-                             f"NEEDS JUDGMENT ({len(needs_judgment)}) — renamed with changed "
-                             f"slug, section fallbacks, and 410s. Review these carefully.",
-                             needs_judgment)
-    write_section(rev, next_row + 2,
-                  f"HIGH CONFIDENCE ({len(high_conf)}) — same-slug subtree moves. Quick "
-                  f"sanity check only.", high_conf)
+    needs_judgment = sum(1 for r in rows if review_tier(r) == "NEEDS JUDGMENT")
+    high_conf = sum(1 for r in rows if review_tier(r) == "HIGH CONFIDENCE")
 
     val = wb.create_sheet("Validation")
     counts = defaultdict(int)
@@ -515,13 +585,17 @@ def write_workbook(rows, patterns, issues, prod_urls, new_urls, target_base, out
     val["A1"].font = Font(bold=True, size=13)
     summary = [
         ("Production URLs", len(prod_urls)),
+        ("  of which vanity/campaign URLs added by hand", vanity_added),
         ("New-site URLs", len(new_urls)),
         ("Exact matches", counts["exact"]),
         ("  of which unchanged (no redirect needed, excluded from export)", unchanged),
         ("Renamed (model, review)", counts["renamed"]),
         ("Parent-fallback (review)", counts["parent-fallback"]),
         ("Gone / 410 suggested (review)", counts["gone"]),
-        ("Rows in final export (redirects + 410s)", len(export_pairs)),
+        ('Rows marked Import? = yes (redirects + 410s)', len(export_pairs)),
+        ("Optional pattern suggestions (advisory, not imported)", len(patterns)),
+        ("Review = NEEDS JUDGMENT (changed slug, fallbacks, 410s)", needs_judgment),
+        ("Review = HIGH CONFIDENCE (same-slug subtree moves)", high_conf),
     ]
     row = 3
     for k, v in summary:
@@ -550,12 +624,7 @@ def write_workbook(rows, patterns, issues, prod_urls, new_urls, target_base, out
             sheet.column_dimensions[col[0].column_letter].width = min(max(width + 2, 12), 70)
 
     wb.save(out_path)
-    csv_path = re.sub(r"\.xlsx$", "", out_path) + ".export.csv"
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow(["Source Path", "Destination URL"])
-        w.writerows(export_pairs)
-    return csv_path
+    return len(export_pairs)
 
 
 # --- Unmatched export (for model to resolve) ---------------------------------
@@ -634,21 +703,21 @@ def apply_resolved(unmatched, new_index, resolved_path, title_map=None):
         method_hint = (r.get("method") or "").strip().lower()
         if dest and dest in new_index:
             row = {"source": src, "source_path": spath, "dest_path": dest,
-                   "method": "renamed", "confidence": 0.9, "review": True,
+                   "method": "renamed", "review": True,
                    "note": r.get("note", "Model-proposed rename; confirm.")}
         elif method_hint == "gone":
             row = {"source": src, "source_path": spath, "dest_path": "410 Gone",
-                   "method": "gone", "confidence": 0.0, "review": True,
+                   "method": "gone", "review": True,
                    "note": r.get("note", "No equivalent page; serve HTTP 410 Gone.")}
         else:
             parent, found = nearest_parent(spath, new_index)
             if found:
                 row = {"source": src, "source_path": spath, "dest_path": parent,
-                       "method": "parent-fallback", "confidence": 0.3, "review": True,
+                       "method": "parent-fallback", "review": True,
                        "note": r.get("note", "No exact page; redirect to nearest existing section.")}
             else:
                 row = {"source": src, "source_path": spath, "dest_path": "410 Gone",
-                       "method": "gone", "confidence": 0.0, "review": True,
+                       "method": "gone", "review": True,
                        "note": r.get("note", "No matching page and no matching parent section; "
                                              "suggest HTTP 410 Gone rather than a homepage redirect.")}
         row["source_title"] = title_map.get(spath, "")
@@ -670,6 +739,12 @@ def main():
     ap.add_argument("--emit-unmatched", help="Write unmatched URLs (with titles) to this JSON for model resolution")
     ap.add_argument("--resolved", help="Read the model's rename decisions from this JSON")
     ap.add_argument("--no-titles", action="store_true", help="Skip fetching page titles (faster, offline)")
+    ap.add_argument("--vanity", nargs="+", metavar="URL", default=[],
+                    help="Vanity/campaign source URLs or paths absent from the sitemap, passed "
+                         "inline (e.g. --vanity /promo /webinar). Use this for the handful a "
+                         "user names in conversation; --vanity-file for a long list.")
+    ap.add_argument("--vanity-file", help="Same as --vanity but read from a file, one URL/path "
+                                         "per line. For long lists or an exported plugin dump.")
     args = ap.parse_args()
 
     if args.prod_file:
@@ -687,6 +762,32 @@ def main():
         new_urls = fetch_sitemap_urls(args.new)
     else:
         ap.error("provide --new or --new-file")
+
+    # Vanity/campaign URLs are not in any sitemap (no inbound crawl path, often print- or
+    # QR-only), so nothing above can discover them -- yet they 404 just as loudly at launch.
+    # They join the production set here and then match, validate, and export like any other
+    # source URL.
+    vanity_added = 0
+    vanity = list(args.vanity)
+    if args.vanity_file:
+        vanity += read_url_file(args.vanity_file)
+    if vanity:
+        # Dedupe against the sitemap AND against the rest of the pasted list -- a user
+        # listing the same page twice in different forms (/promo and
+        # https://www.example.com/promo) must not yield two rows for one page.
+        known = {to_path(u) for u in prod_urls}
+        extra = []
+        for u in vanity:
+            p = to_path(u)
+            if p in known:
+                continue
+            known.add(p)
+            extra.append(u)
+        vanity_added = len(extra)
+        prod_urls = list(prod_urls) + extra
+        print(f"Vanity URLs: {len(vanity)} supplied, {vanity_added} added "
+              f"({len(vanity) - vanity_added} skipped as duplicates of the sitemap or "
+              f"of each other)")
 
     prod_urls, prod_dropped = filter_pages(sorted(set(prod_urls)))
     new_urls, new_dropped = filter_pages(sorted(set(new_urls)))
@@ -723,14 +824,15 @@ def main():
     redirect_rows = [r for r in rows
                      if r["source_path"] != r["dest_path"] and r.get("method") != "gone"]
     issues = validate(redirect_rows)
-    csv_path = write_workbook(rows, patterns, issues, prod_urls, new_urls, args.target, args.out)
+    export_count = write_workbook(rows, patterns, issues, prod_urls, new_urls, args.target,
+                                  args.out, vanity_added=vanity_added)
 
     exact = sum(1 for r in rows if r["method"] == "exact")
     review = sum(1 for r in rows if r["review"])
     print(f"\nWrote {args.out}")
     print(f"  {len(rows)} redirects: {exact} exact, {review} need review")
-    print(f"  {len(patterns)} provably-safe pattern(s), {len(issues)} loop/chain issue(s)")
-    print(f"  flat export -> {csv_path}")
+    print(f"  {len(patterns)} optional pattern suggestion(s), {len(issues)} loop/chain issue(s)")
+    print(f"  {export_count} row(s) marked Import? = yes on the Redirects sheet")
     if issues:
         print("  ! Loop/chain issues found -- see the Validation sheet before using.")
 

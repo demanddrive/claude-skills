@@ -1,0 +1,7 @@
+{
+  "/about-us":                    {"dest_path": "/company",              "method": "renamed", "note": "valid"},
+  "/team-members":               {"dest_path": "/does-not-exist",       "method": "renamed", "note": "HALLUCINATED: not a new-site path; must be rejected"},
+  "/featured-industries/marine": {"dest_path": "/industry/marine",      "method": "renamed", "note": "valid"},
+  "/blog/2019/discontinued-post": {"dest_path": "",                                          "note": "accept fallback"},
+  "/support/legacy-rma":         {"method": "gone",                                          "note": "retired"}
+}

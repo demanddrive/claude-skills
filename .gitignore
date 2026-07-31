@@ -1,7 +1,8 @@
-# Skill eval run outputs (large, regenerated on each run) — kept out of the repo.
-# The reproducible inputs live in each skill's evals/ directory instead.
+# Skill eval/test run outputs (large, regenerated on each run) — kept out of the repo.
+# The reproducible inputs live in each skill's tests/ directory instead.
 *-workspace/
 skills/*/evals/**/outputs/
+skills/*/tests/**/outputs/
 feedback.json
 benchmark.json
 benchmark.md
@@ -19,3 +20,4 @@ venv/
 
 # Local Claude Code settings (machine-specific)
 .claude/settings.local.json
+*.code-workspace

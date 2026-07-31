@@ -1,0 +1,7 @@
+{
+  "/about-us":                    {"dest_path": "/company",         "method": "renamed", "note": "Our Story page, renamed to Company"},
+  "/team-members":               {"dest_path": "/team",            "method": "renamed", "note": "slug changed"},
+  "/featured-industries/marine": {"dest_path": "/industry/marine", "method": "renamed", "note": "same-slug subtree move"},
+  "/blog/2019/discontinued-post": {"dest_path": "",                                     "note": "unsure; accept fallback"},
+  "/support/legacy-rma":         {"method": "gone",                                    "note": "RMA process retired, no replacement"}
+}
