@@ -18,7 +18,9 @@
  *   }
  *
  * CLI:
- *   node config.js figma-boxes <frame-id>     extractor code for use_figma, frame and ignore pattern filled in
+ *   node config.js figma-boxes <frame-id> [--section]
+ *                                             extractor code for use_figma, frame and ignore pattern filled in;
+ *                                             --section treats the node as one section (a single block)
  *   node config.js runs-dir <page-url> <width> [runs-root]  folder for this page and breakpoint's Figma files and runs
  *   node config.js setup                         install npm dependencies (if missing) and Playwright's Chromium
  */
@@ -195,13 +197,14 @@ if ( process.argv[ 1 ] === fileURLToPath( import.meta.url ) ) {
 	}
 	const frameId = rest[ 0 ];
 	if ( 'figma-boxes' !== command || ! frameId ) {
-		console.error( 'Usage: node config.js figma-boxes <frame-id> | node config.js runs-dir <page-url> <width>' );
+		console.error( 'Usage: node config.js figma-boxes <frame-id> [--section] | node config.js runs-dir <page-url> <width>' );
 		process.exit( 2 );
 	}
 	const config = loadConfig();
 	const code = fs.readFileSync( path.join( path.dirname( fileURLToPath( import.meta.url ) ), 'figma-boxes.js' ), 'utf8' )
 		.split( '\n' ).filter( ( l ) => ! l.startsWith( '//' ) ).join( '\n' )
 		.replace( 'FRAME_ID', frameId.replace( '-', ':' ) )
+		.replace( 'SINGLE_SECTION', String( rest.includes( '--section' ) ) )
 		.replace( 'FIGMA_IGNORE', config.figmaIgnore.replace( /\\/g, '\\\\' ).replace( /'/g, "\\'" ) );
 	process.stdout.write( code );
 }

@@ -58,23 +58,17 @@ a run warns that sections were paired by position, or names don't line up, add
 
 Run each breakpoint the user gave a frame for; the viewport width is the frame's width.
 Parse `fileKey` and `nodeId` from the Figma URL (`node-id=16233-18647` → `16233:18647`).
-Get this page and breakpoint's folder (it lives in the plugin's persistent data, grouped by
-project, and survives plugin updates):
 
-```bash
-node <skill-dir>/scripts/config.js runs-dir <page-url> <frame-width> ${CLAUDE_PLUGIN_DATA}/runs
-```
-
-It prints the folder; use that path wherever `$OUT` appears below.
-
-The Figma files go there once; each triage run writes a dated subfolder
-(`2026-09-25_014512/`) so every iteration is kept, `latest` links to the newest, and triage
-prints what changed since the previous run.
+Triage keeps everything in the plugin's persistent data, grouped by project, page and width:
+the Figma inputs once, then a dated folder per run (`2026-09-25_014512/`), with `latest` linking
+to the newest. It prints where it wrote `triage.json` and what changed since the previous run.
+Don't write into that folder yourself (it's under `~/.claude`, which is protected); pass files
+from anywhere and triage stores them.
 
 **If `FIGMA_TOKEN` is set** (a read-only Figma personal access token), skip steps 1–2: pass
-`--file-key <key> --node-id <id>` to triage instead of `--figma`/`--figma-png`, and it fetches
-the frame itself through the Figma REST API on the first run (`--refresh-figma` re-fetches
-after the design changes). Otherwise use the Figma MCP:
+`--file-key <key> --node-id <id>` to triage and it fetches the frame itself through the Figma
+REST API on the first run (`--refresh-figma` re-fetches after the design changes; `--section`
+for a single block). Otherwise use the Figma MCP:
 
 1. **Figma boxes.** Print the extractor for this project and frame:
 
@@ -82,21 +76,29 @@ after the design changes). Otherwise use the Figma MCP:
    node <skill-dir>/scripts/config.js figma-boxes <node-id>
    ```
 
+   For a single block (a section or component node rather than a page frame), add
+   `--section` so the node is treated as the frame's only section.
+
    Load the figma-use guidance the Figma MCP requires, run the printed code through
-   `use_figma` unchanged (it is read-only), and save the returned string **verbatim** to
-   `$OUT/figma-boxes.txt`.
+   `use_figma` unchanged (it is read-only), and save the returned string **verbatim** to a
+   file in the system temp directory, e.g. `/tmp/figma-boxes-<width>.txt`. Write it exactly as
+   returned, even when it's long or repetitive; never retype, regenerate or reformat it.
 2. **Frame render.** Call `get_screenshot` with `maxDimension` set to the frame height (the
-   `F|width|height` line) rounded up, then download it to `$OUT/figma.png` with the returned curl.
+   `F|width|height` line) rounded up. Keep the returned image URL; triage downloads it.
 3. **Triage.**
 
    ```bash
    node <skill-dir>/scripts/triage.js --url <page-url> --width <frame-width> \
-     --figma $OUT/figma-boxes.txt --figma-png $OUT/figma.png --runs-root ${CLAUDE_PLUGIN_DATA}/runs
+     --figma /tmp/figma-boxes-<width>.txt --figma-png-url '<screenshot-url>' \
+     --runs-root ${CLAUDE_PLUGIN_DATA}/runs
    ```
 
    Exit 0 means every section is ok or dynamic; 1 means there is work; 2 is an error.
+   Re-runs for the same page and width can drop `--figma` and `--figma-png-url`: the stored
+   inputs are reused. Pass them again only when the design changed. The screenshot URL is
+   short-lived, so take a new screenshot if a download fails.
 
-## Acting on `$OUT/latest/triage.json`
+## Acting on `triage.json`
 
 Each section has a headline `verdict` and a `findings` list; act on every finding.
 

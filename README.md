@@ -10,6 +10,8 @@ instead of reinventing the process each time.
 | Skill | What it does |
 |-------|--------------|
 | [`redirect-sheet-creator`](skills/redirect-sheet-creator/) | Builds a 301 redirect sheet mapping a production sitemap onto a new/staging site for a migration — exact + semantic matching, loop/chain validation, Excel workbook output. |
+| [`figma-page`](skills/figma-page/) | Builds a WordPress page from a Figma frame out of the site's existing blocks via the site's MCP server, then checks it with figma-visual-diff. |
+| [`figma-block`](skills/figma-block/) | Codes a new block from a Figma section, puts it on a demo page via the site's MCP server, and scores the build with figma-visual-diff. Functionality still needs manual review. |
 | [`figma-visual-diff`](skills/figma-visual-diff/) | Compares a built page against its Figma frame per breakpoint and triages every section (structure, content, alignment, layout, visual) with a wireframe diff and a pixel diff. |
 
 ## Installing as a plugin

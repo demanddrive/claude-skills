@@ -3,7 +3,7 @@
  * figma-boxes.txt and figma.png the MCP workflow produces. Needs a personal access token
  * in FIGMA_TOKEN (Figma → Settings → Security → Personal access tokens, read-only scope).
  *
- *   node figma-rest.js <file-key> <node-id> <out-dir>
+ *   node figma-rest.js <file-key> <node-id> <out-dir> [--section]
  *
  * boxesFromNode() mirrors figma-boxes.js, which runs inside Figma; tests/unit.test.js holds
  * them to identical output on the same subtree.
@@ -28,10 +28,11 @@ const stroked = ( n ) => ( n.strokes || [] ).some( ( p ) => false !== p.visible 
  * The figma-boxes.txt lines for a frame node in REST shape.
  *
  * @param {Object} frame  Frame node from GET /v1/files/:key/nodes (document).
- * @param {string} ignore Pattern of top-level layers that aren't sections.
+ * @param {string}  ignore  Pattern of top-level layers that aren't sections.
+ * @param {boolean} section Treat the node as one section (a single block) instead of a page.
  * @return {string} figma-boxes.txt content.
  */
-export function boxesFromNode( frame, ignore = DEFAULT_CONFIG.figmaIgnore ) {
+export function boxesFromNode( frame, ignore = DEFAULT_CONFIG.figmaIgnore, section = false ) {
 	const IGNORE = new RegExp( ignore, 'i' );
 	const fb = frame.absoluteBoundingBox;
 	const r = Math.round;
@@ -79,7 +80,7 @@ export function boxesFromNode( frame, ignore = DEFAULT_CONFIG.figmaIgnore ) {
 		}
 	};
 
-	const tops = ( frame.children || [] )
+	const tops = section ? [ frame ] : ( frame.children || [] )
 		.filter( ( c ) => visible( c ) && ! IGNORE.test( c.name ) && c.absoluteBoundingBox )
 		.sort( ( a, b ) => a.absoluteBoundingBox.y - b.absoluteBoundingBox.y );
 	for ( const child of tops ) {
@@ -106,10 +107,10 @@ async function figmaGet( url, token ) {
 /**
  * Fetch a frame and write figma-boxes.txt and figma.png into `out`.
  *
- * @param {Object} options { fileKey, nodeId, out, token, ignore }.
+ * @param {Object} options { fileKey, nodeId, out, token, ignore, section }.
  * @return {Promise<{frame: {width: number, height: number}}>} Frame size.
  */
-export async function fetchFigmaFrame( { fileKey, nodeId, out, token = process.env.FIGMA_TOKEN, ignore } ) {
+export async function fetchFigmaFrame( { fileKey, nodeId, out, token = process.env.FIGMA_TOKEN, ignore, section = false } ) {
 	if ( ! token ) {
 		throw new Error( 'FIGMA_TOKEN is not set. Create a read-only personal access token in Figma (Settings → Security) and export it.' );
 	}
@@ -120,7 +121,7 @@ export async function fetchFigmaFrame( { fileKey, nodeId, out, token = process.e
 		throw new Error( `Figma node ${ id } not found in file ${ fileKey }.` );
 	}
 	fs.mkdirSync( out, { recursive: true } );
-	fs.writeFileSync( path.join( out, 'figma-boxes.txt' ), boxesFromNode( frame, ignore ?? loadConfig().figmaIgnore ) );
+	fs.writeFileSync( path.join( out, 'figma-boxes.txt' ), boxesFromNode( frame, ignore ?? loadConfig().figmaIgnore, section ) );
 
 	// scale=1 renders at 1:1, matching get_screenshot with maxDimension = frame height.
 	const images = await ( await figmaGet( `https://api.figma.com/v1/images/${ fileKey }?ids=${ encodeURIComponent( id ) }&format=png&scale=1`, token ) ).json();
@@ -134,12 +135,13 @@ export async function fetchFigmaFrame( { fileKey, nodeId, out, token = process.e
 }
 
 if ( process.argv[ 1 ] === fileURLToPath( import.meta.url ) ) {
-	const [ fileKey, nodeId, out ] = process.argv.slice( 2 );
+	const section = process.argv.includes( '--section' );
+	const [ fileKey, nodeId, out ] = process.argv.slice( 2 ).filter( ( a ) => '--section' !== a );
 	if ( ! fileKey || ! nodeId || ! out ) {
-		console.error( 'Usage: node figma-rest.js <file-key> <node-id> <out-dir>   (FIGMA_TOKEN must be set)' );
+		console.error( 'Usage: node figma-rest.js <file-key> <node-id> <out-dir> [--section]   (FIGMA_TOKEN must be set)' );
 		process.exit( 2 );
 	}
-	fetchFigmaFrame( { fileKey, nodeId, out } )
+	fetchFigmaFrame( { fileKey, nodeId, out, section } )
 		.then( ( { frame } ) => console.log( `wrote figma-boxes.txt and figma.png (${ frame.width }×${ frame.height }) to ${ out }` ) )
 		.catch( ( error ) => {
 			console.error( error.message );

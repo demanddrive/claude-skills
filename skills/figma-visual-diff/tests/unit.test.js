@@ -10,12 +10,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 
 import { DEFAULT_CONFIG, figmaSlug, loadConfig, projectRoot, runsDir } from '../scripts/config.js';
-import { classify, DEFAULTS, parseArgs, pruneRuns } from '../scripts/triage.js';
+import { classify, DEFAULTS, importFigma, parseArgs, pruneRuns } from '../scripts/triage.js';
 import { execFileSync } from 'node:child_process';
 
 import { boxesFromNode, fetchFigmaFrame } from '../scripts/figma-rest.js';
 import { sharedMedia } from '../scripts/pixel-diff.js';
-import { hash, matchBoxes, mergeTextRuns, normText, paddingOf, pairSections, parseFigma, sectionScore } from '../scripts/wireframe-diff.js';
+import { cacheBusted, hash, matchBoxes, mergeTextRuns, normText, paddingOf, pairSections, parseFigma, sectionScore } from '../scripts/wireframe-diff.js';
 
 const here = path.dirname( fileURLToPath( import.meta.url ) );
 const textBox = ( x, y, w, h, text ) => ( { type: 'text', x, y, w, h, full: normText( text ), hash: hash( normText( text ) ), text: normText( text ).slice( 0, 28 ) } );
@@ -181,6 +181,18 @@ test( 'the REST extractor matches figma-boxes.js on the same Figma subtree', () 
 	assert.equal( boxesFromNode( node ), expected );
 } );
 
+test( 'section mode treats the node as one section, in both extractors', () => {
+	// rest-section.single.expected.txt: figma-boxes.js with --section on the same node inside Figma.
+	const node = JSON.parse( fs.readFileSync( path.join( here, 'fixtures', 'rest-section.json' ), 'utf8' ) );
+	const expected = fs.readFileSync( path.join( here, 'fixtures', 'rest-section.single.expected.txt' ), 'utf8' ).trim();
+	assert.equal( boxesFromNode( node, undefined, true ), expected );
+	assert.deepEqual( expected.split( '\n' ).filter( ( l ) => l.startsWith( 'S|' ) ), [ `S|0|${ node.name }|0|${ Math.round( node.absoluteBoundingBox.height ) }` ] );
+
+	const code = ( ...flags ) => execFileSync( process.execPath, [ path.join( here, '..', 'scripts', 'config.js' ), 'figma-boxes', '1:2', ...flags ], { encoding: 'utf8' } );
+	assert.match( code( '--section' ), /const tops = true \? \[ FRAME \]/ );
+	assert.match( code(), /const tops = false \? \[ FRAME \]/ );
+} );
+
 test( 'the REST extractor skips hidden layers, invisible paints and ignored sections', () => {
 	const node = JSON.parse( fs.readFileSync( path.join( here, 'fixtures', 'rest-section.json' ), 'utf8' ) );
 	const baseline = boxesFromNode( node );
@@ -231,7 +243,33 @@ test( 'with a file key and node id, triage defaults the Figma files into the run
 	assert.equal( args.figma, path.join( '/data/runs', 'acme', 'about', '375', 'figma-boxes.txt' ) );
 	assert.equal( args.figmaPng, path.join( '/data/runs', 'acme', 'about', '375', 'figma.png' ) );
 	assert.equal( args.refreshFigma, true );
-	assert.throws( () => parseArgs( [ '--url', 'https://site.test/', '--width', '375' ] ), /--file-key and --node-id/ );
+	assert.throws( () => parseArgs( [ '--url', 'https://site.test/', '--width', '375', '--runs-root', '/data/runs' ] ), /--file-key and --node-id/ );
+} );
+
+test( 'triage stores Figma inputs from anywhere in the runs folder, and later runs reuse them', async () => {
+	const root = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-import-' ) );
+	const boxes = path.join( root, 'elsewhere-boxes.txt' );
+	fs.writeFileSync( boxes, 'F|1440|100' );
+	const png = Buffer.from( [ 0x89, 0x50, 0x4e, 0x47 ] );
+	const urls = [];
+	const download = async ( url ) => ( urls.push( url ), { ok: true, arrayBuffer: async () => png } );
+	const base = [ '--url', 'https://site.test/careers/', '--width', '1440', '--runs-root', root, '--project', 'acme' ];
+
+	const first = parseArgs( [ ...base, '--figma', boxes, '--figma-png-url', 'https://figma.test/render.png' ] );
+	await importFigma( first, download );
+	const stored = path.join( root, 'acme', 'careers', '1440' );
+	assert.equal( first.figma, path.join( stored, 'figma-boxes.txt' ) );
+	assert.equal( fs.readFileSync( first.figma, 'utf8' ), 'F|1440|100' );
+	assert.deepEqual( fs.readFileSync( first.figmaPng ), png );
+	assert.deepEqual( urls, [ 'https://figma.test/render.png' ] );
+
+	const again = parseArgs( base ); // nothing passed: the stored files are enough
+	await importFigma( again, download );
+	assert.equal( again.figma, first.figma );
+	assert.equal( urls.length, 1, 'no second download' );
+
+	await assert.rejects( importFigma( parseArgs( [ ...base, '--figma-png-url', 'https://figma.test/gone.png' ] ), async () => ( { ok: false, status: 403 } ) ), /short-lived/ );
+	fs.rmSync( root, { recursive: true } );
 } );
 
 test( 'padding is the space from each section edge to its content, ignoring backgrounds', () => {
@@ -259,4 +297,10 @@ test( 'padding ignores off-screen slides and clips overflowing ones', () => {
 		{ type: 'text', x: -1100, y: 177, w: 1080, h: 72 }, // previous slide, fully off-screen
 	];
 	assert.deepEqual( paddingOf( boxes, 1440, 474 ), { top: 159, right: 0, bottom: 207, left: 191 } );
+} );
+
+test( 'pages load with a unique query parameter so page caches are skipped', () => {
+	assert.equal( cacheBusted( 'https://site.test/careers/', 42 ), 'https://site.test/careers/?fvd=42' );
+	assert.equal( cacheBusted( 'https://site.test/?p=7&fvd=1', 43 ), 'https://site.test/?p=7&fvd=43' );
+	assert.notEqual( cacheBusted( 'https://site.test/' ), 'https://site.test/' );
 } );

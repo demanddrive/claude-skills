@@ -1,5 +1,6 @@
 // Figma Plugin API script, run through the Figma MCP `use_figma` tool. Don't paste it by hand:
-// `node config.js figma-boxes <frame-id>` fills in FRAME_ID and the project's FIGMA_IGNORE.
+// `node config.js figma-boxes <frame-id> [--section]` fills in FRAME_ID, SINGLE_SECTION and the
+// project's FIGMA_IGNORE.
 // Read-only. Returns one line per visible leaf element of the frame's top-level sections:
 //   S|<index>|<name>|<y>|<height>             section, in visual order
 //   B|<section>|<type>|x|y|w|h|<hash>|<text>  box, section-relative; hash/text only for text
@@ -72,7 +73,8 @@ function walk( n, s, isRoot ) {
 	}
 }
 
-const tops = FRAME.children
+// A page frame's children are its sections; a single block's node is its own only section.
+const tops = SINGLE_SECTION ? [ FRAME ] : FRAME.children
 	.filter( ( c ) => false !== c.visible && ! IGNORE.test( c.name ) && c.absoluteBoundingBox )
 	.sort( ( a, b ) => a.absoluteBoundingBox.y - b.absoluteBoundingBox.y );
 for ( const child of tops ) {

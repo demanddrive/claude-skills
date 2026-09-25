@@ -12,8 +12,12 @@
  *   ok / dynamic
  *
  * Usage:
- *   node triage.js --url <page-url> --width <1440|375> --out <dir> \
- *     --figma <figma-boxes.txt> --figma-png <frame.png> [--viewport-height 900]
+ *   node triage.js --url <page-url> --width <1440|375> [--out <dir>] \
+ *     --figma <figma-boxes.txt> ( --figma-png <frame.png> | --figma-png-url <url> ) [--viewport-height 900]
+ *
+ * The Figma inputs can come from anywhere (a temp file is fine); they are stored in the runs
+ * folder, so later runs for the same page and width can leave --figma/--figma-png out.
+ * --figma-png-url downloads the render (e.g. the URL get_screenshot returns) instead.
  *
  * --out defaults to <runs-dir>/<timestamp> (see runsDir() in config.js; override with
  * --runs-root / --project), so every iteration is kept; <runs-dir>/latest is the newest. Writes
@@ -54,7 +58,7 @@ const ACTIONS = {
 	ok: 'none',
 };
 
-const FLAGS = new Set( [ 'refreshFigma' ] );
+const FLAGS = new Set( [ 'refreshFigma', 'section' ] );
 
 export function parseArgs( argv ) {
 	const args = { ...DEFAULTS };
@@ -62,12 +66,9 @@ export function parseArgs( argv ) {
 		const key = argv[ i ].replace( /^--/, '' ).replace( /-([a-z])/g, ( m, c ) => c.toUpperCase() );
 		args[ key ] = FLAGS.has( key ) ? true : argv[ ++i ];
 	}
-	// Figma input is either files from the MCP workflow or a file key + node id fetched with FIGMA_TOKEN.
-	const fetching = args.fileKey && args.nodeId;
-	for ( const required of [ 'url', 'width', ...( fetching ? [] : [ 'figma', 'figmaPng' ] ) ] ) {
+	for ( const required of [ 'url', 'width' ] ) {
 		if ( ! args[ required ] ) {
-			const hint = [ 'figma', 'figmaPng' ].includes( required ) ? ' (or pass --file-key and --node-id with FIGMA_TOKEN set)' : '';
-			throw new Error( `Missing --${ required.replace( /[A-Z]/g, ( c ) => `-${ c.toLowerCase() }` ) }${ hint }` );
+			throw new Error( `Missing --${ required }` );
 		}
 	}
 	if ( ! args.out ) {
@@ -77,12 +78,46 @@ export function parseArgs( argv ) {
 		args.runsDir = runsDir( args.url, args.width, { runsRoot: args.runsRoot, project: args.project } );
 		args.out = path.join( args.runsDir, stamp );
 	}
-	if ( fetching ) {
-		const figmaDir = args.runsDir || path.dirname( args.out );
-		args.figma = args.figma || path.join( figmaDir, 'figma-boxes.txt' );
-		args.figmaPng = args.figmaPng || path.join( figmaDir, 'figma.png' );
+	// Figma inputs live next to the runs: from the MCP workflow (--figma, --figma-png or
+	// --figma-png-url, stored there by importFigma), fetched with FIGMA_TOKEN (--file-key and
+	// --node-id), or left there by an earlier run.
+	args.figmaDir = args.runsDir || path.dirname( args.out );
+	args.figmaSource = args.figma;
+	args.figmaPngSource = args.figmaPng;
+	args.figma = path.join( args.figmaDir, 'figma-boxes.txt' );
+	args.figmaPng = path.join( args.figmaDir, 'figma.png' );
+	const fetching = args.fileKey && args.nodeId;
+	const missing = [
+		! args.figmaSource && ! fs.existsSync( args.figma ) && '--figma',
+		! args.figmaPngSource && ! args.figmaPngUrl && ! fs.existsSync( args.figmaPng ) && '--figma-png (or --figma-png-url)',
+	].filter( Boolean );
+	if ( missing.length && ! fetching ) {
+		throw new Error( `Missing ${ missing.join( ' and ' ) }: no stored Figma data in ${ args.figmaDir } (or pass --file-key and --node-id with FIGMA_TOKEN set)` );
 	}
 	return args;
+}
+
+/**
+ * Store the Figma inputs in the runs folder: copy --figma/--figma-png from wherever they
+ * were written, or download --figma-png-url.
+ *
+ * @param {Object}   args     Parsed arguments.
+ * @param {Function} download fetch-compatible function (injectable for tests).
+ */
+export async function importFigma( args, download = fetch ) {
+	fs.mkdirSync( args.figmaDir, { recursive: true } );
+	for ( const [ from, to ] of [ [ args.figmaSource, args.figma ], [ args.figmaPngSource, args.figmaPng ] ] ) {
+		if ( from && path.resolve( from ) !== path.resolve( to ) ) {
+			fs.copyFileSync( from, to );
+		}
+	}
+	if ( args.figmaPngUrl ) {
+		const response = await download( args.figmaPngUrl );
+		if ( ! response.ok ) {
+			throw new Error( `Couldn't download the Figma render (${ response.status }); take a new screenshot, its URL is short-lived.` );
+		}
+		fs.writeFileSync( args.figmaPng, Buffer.from( await response.arrayBuffer() ) );
+	}
 }
 
 const RUN_DIR = /^\d{4}-\d{2}-\d{2}_\d{6}$/;
@@ -186,14 +221,9 @@ export function classify( w, p, args ) {
 
 async function main() {
 	const args = parseArgs( process.argv.slice( 2 ) );
+	await importFigma( args );
 	if ( args.fileKey && args.nodeId && ( args.refreshFigma || ! fs.existsSync( args.figma ) || ! fs.existsSync( args.figmaPng ) ) ) {
-		const dir = path.dirname( args.figma );
-		await fetchFigmaFrame( { fileKey: args.fileKey, nodeId: args.nodeId, out: dir } );
-		for ( const [ from, to ] of [ [ path.join( dir, 'figma-boxes.txt' ), args.figma ], [ path.join( dir, 'figma.png' ), args.figmaPng ] ] ) {
-			if ( from !== to ) {
-				fs.renameSync( from, to );
-			}
-		}
+		await fetchFigmaFrame( { fileKey: args.fileKey, nodeId: args.nodeId, out: args.figmaDir, section: Boolean( args.section ) } );
 		console.log( `  fetched Figma frame ${ args.nodeId } from the REST API` );
 	}
 	fs.mkdirSync( args.out, { recursive: true } );

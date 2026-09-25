@@ -206,6 +206,21 @@ export function extractPageBoxes( detect, cfg ) {
  * @param {import('playwright').Page} page Fresh page.
  * @param {string}                    url  Page URL.
  */
+/**
+ * The page URL with a unique query parameter. Page caches (WP Rocket, most server caches)
+ * skip URLs with query strings, so every capture sees the page as it is now rather than a
+ * copy cached before the last style or content change.
+ *
+ * @param {string} url   Page URL.
+ * @param {number} stamp Unique value (defaults to now).
+ * @return {string} URL to load.
+ */
+export function cacheBusted( url, stamp = Date.now() ) {
+	const u = new URL( url );
+	u.searchParams.set( 'fvd', String( stamp ) );
+	return u.href;
+}
+
 export async function loadPage( page, url ) {
 	let failures = [];
 	const watched = new Set( [ 'stylesheet', 'script', 'font' ] );
@@ -213,7 +228,7 @@ export async function loadPage( page, url ) {
 	page.on( 'response', ( r ) => watched.has( r.request().resourceType() ) && r.status() >= 400 && failures.push( `${ r.request().resourceType() } ${ r.url() } (${ r.status() })` ) );
 	for ( let attempt = 1; attempt <= 3; attempt++ ) {
 		failures = [];
-		await page.goto( url, { waitUntil: 'networkidle' } );
+		await page.goto( cacheBusted( url ), { waitUntil: 'networkidle' } );
 		await prepareForCapture( page );
 		const unloaded = await page.evaluate( () => [ ...document.querySelectorAll( 'link[rel="stylesheet"]' ) ].filter( ( l ) => ! l.sheet && ! l.disabled && ( ! l.media || matchMedia( l.media ).matches ) ).map( ( l ) => `stylesheet ${ l.href } (not applied)` ) );
 		failures.push( ...unloaded );
