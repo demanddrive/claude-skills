@@ -1,0 +1,14 @@
+{
+	"name": "demanddrive",
+	"description": "The Demand Drive / Digital Impulse team's Claude Code plugins.",
+	"owner": {
+		"name": "Demand Drive"
+	},
+	"plugins": [
+		{
+			"name": "demanddrive-skills",
+			"source": "./",
+			"description": "The team's shared skills: redirect-sheet-creator, figma-visual-diff."
+		}
+	]
+}

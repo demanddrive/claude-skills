@@ -1,2 +1,1 @@
-1. turn into a plugin that can be installed/updated
 1. skill for browsers (agent-browser for most cases, chrome devtools mcp for performance/lighthouse audits, memory leak detection)

@@ -1,0 +1,954 @@
+{
+ "type": "INSTANCE",
+ "name": "Content Cards (No Bg) / Desktop",
+ "absoluteBoundingBox": {
+  "x": 21581,
+  "y": 1140.67,
+  "width": 1440,
+  "height": 367
+ },
+ "fills": [
+  {
+   "type": "SOLID"
+  }
+ ],
+ "strokes": [
+  {
+   "type": "SOLID"
+  }
+ ],
+ "children": [
+  {
+   "type": "FRAME",
+   "name": "Grid",
+   "absoluteBoundingBox": {
+    "x": 21649,
+    "y": 1140.67,
+    "width": 1304,
+    "height": 263
+   },
+   "children": [
+    {
+     "type": "FRAME",
+     "name": "Row",
+     "absoluteBoundingBox": {
+      "x": 21650,
+      "y": 1140.67,
+      "width": 1302,
+      "height": 263
+     },
+     "children": [
+      {
+       "type": "INSTANCE",
+       "name": "Content Media Column",
+       "absoluteBoundingBox": {
+        "x": 21650,
+        "y": 1140.67,
+        "width": 289.5,
+        "height": 263
+       },
+       "children": [
+        {
+         "type": "FRAME",
+         "name": "Media Container",
+         "absoluteBoundingBox": {
+          "x": 21650,
+          "y": 1140.67,
+          "width": 289.5,
+          "height": 105
+         },
+         "children": [
+          {
+           "type": "INSTANCE",
+           "name": "Icon",
+           "absoluteBoundingBox": {
+            "x": 21650,
+            "y": 1140.67,
+            "width": 289.5,
+            "height": 85
+           },
+           "fills": [
+            {
+             "type": "SOLID",
+             "visible": false
+            }
+           ],
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Framed Icon",
+             "absoluteBoundingBox": {
+              "x": 21650,
+              "y": 1140.67,
+              "width": 85,
+              "height": 85
+             },
+             "fills": [
+              {
+               "type": "SOLID"
+              }
+             ],
+             "strokes": [
+              {
+               "type": "SOLID",
+               "opacity": 0.2
+              }
+             ],
+             "strokeWeight": 1,
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Icon",
+               "absoluteBoundingBox": {
+                "x": 21667.5,
+                "y": 1158.17,
+                "width": 50,
+                "height": 50
+               },
+               "children": [
+                {
+                 "type": "VECTOR",
+                 "name": "diamond",
+                 "absoluteBoundingBox": {
+                  "x": 21670.63,
+                  "y": 1165.46,
+                  "width": 41.67,
+                  "height": 37.5
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "FRAME",
+         "name": "Content",
+         "absoluteBoundingBox": {
+          "x": 21650,
+          "y": 1245.67,
+          "width": 289.5,
+          "height": 158
+         },
+         "children": [
+          {
+           "type": "SLOT",
+           "name": "Inner Blocks",
+           "absoluteBoundingBox": {
+            "x": 21650,
+            "y": 1245.67,
+            "width": 289.5,
+            "height": 158
+           },
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Inner Block",
+             "absoluteBoundingBox": {
+              "x": 21650,
+              "y": 1245.67,
+              "width": 289.5,
+              "height": 50
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false
+              }
+             ],
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 21650,
+                "y": 1245.67,
+                "width": 289.5,
+                "height": 50
+               },
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 21650,
+                  "y": 1245.67,
+                  "width": 289.5,
+                  "height": 36
+                 },
+                 "characters": "Quality",
+                 "absoluteRenderBounds": {
+                  "x": 21651.15,
+                  "y": 1254.23,
+                  "width": 83.77,
+                  "height": 26.01
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "INSTANCE",
+             "name": "Inner Blocks",
+             "absoluteBoundingBox": {
+              "x": 21650,
+              "y": 1295.67,
+              "width": 289.5,
+              "height": 108
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false
+              }
+             ],
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 21650,
+                "y": 1295.67,
+                "width": 289.5,
+                "height": 108
+               },
+               "fills": [
+                {
+                 "type": "SOLID",
+                 "visible": false
+                }
+               ],
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 21650,
+                  "y": 1295.67,
+                  "width": 289.5,
+                  "height": 108
+                 },
+                 "characters": "Massa vel sapien pellentesque vulputate lectus. Ut semper sit morbi tempus porta elementum. Ut semper sit morbi tempus porta elementum.",
+                 "absoluteRenderBounds": {
+                  "x": 21650.54,
+                  "y": 1303.6,
+                  "width": 269.49,
+                  "height": 96.37
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "type": "INSTANCE",
+       "name": "Content Media Column",
+       "absoluteBoundingBox": {
+        "x": 21987.5,
+        "y": 1140.67,
+        "width": 289.5,
+        "height": 263
+       },
+       "children": [
+        {
+         "type": "FRAME",
+         "name": "Media Container",
+         "absoluteBoundingBox": {
+          "x": 21987.5,
+          "y": 1140.67,
+          "width": 289.5,
+          "height": 105
+         },
+         "children": [
+          {
+           "type": "INSTANCE",
+           "name": "Icon",
+           "absoluteBoundingBox": {
+            "x": 21987.5,
+            "y": 1140.67,
+            "width": 289.5,
+            "height": 85
+           },
+           "fills": [
+            {
+             "type": "SOLID",
+             "visible": false
+            }
+           ],
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Framed Icon",
+             "absoluteBoundingBox": {
+              "x": 21987.5,
+              "y": 1140.67,
+              "width": 85,
+              "height": 85
+             },
+             "fills": [
+              {
+               "type": "SOLID"
+              }
+             ],
+             "strokes": [
+              {
+               "type": "SOLID",
+               "opacity": 0.2
+              }
+             ],
+             "strokeWeight": 1,
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Icon",
+               "absoluteBoundingBox": {
+                "x": 22005.0,
+                "y": 1158.17,
+                "width": 50,
+                "height": 50
+               },
+               "children": [
+                {
+                 "type": "VECTOR",
+                 "name": "avg_time",
+                 "absoluteBoundingBox": {
+                  "x": 22010.21,
+                  "y": 1161.29,
+                  "width": 37.5,
+                  "height": 43.75
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "FRAME",
+         "name": "Content",
+         "absoluteBoundingBox": {
+          "x": 21987.5,
+          "y": 1245.67,
+          "width": 289.5,
+          "height": 158
+         },
+         "children": [
+          {
+           "type": "SLOT",
+           "name": "Inner Blocks",
+           "absoluteBoundingBox": {
+            "x": 21987.5,
+            "y": 1245.67,
+            "width": 289.5,
+            "height": 158
+           },
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Inner Block",
+             "absoluteBoundingBox": {
+              "x": 21987.5,
+              "y": 1245.67,
+              "width": 289.5,
+              "height": 50
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false
+              }
+             ],
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 21987.5,
+                "y": 1245.67,
+                "width": 289.5,
+                "height": 50
+               },
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 21987.5,
+                  "y": 1245.67,
+                  "width": 289.5,
+                  "height": 36
+                 },
+                 "characters": "Efficiency",
+                 "absoluteRenderBounds": {
+                  "x": 21989.21,
+                  "y": 1254.23,
+                  "width": 122.89,
+                  "height": 26.01
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "INSTANCE",
+             "name": "Inner Blocks",
+             "absoluteBoundingBox": {
+              "x": 21987.5,
+              "y": 1295.67,
+              "width": 289.5,
+              "height": 108
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false
+              }
+             ],
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 21987.5,
+                "y": 1295.67,
+                "width": 289.5,
+                "height": 108
+               },
+               "fills": [
+                {
+                 "type": "SOLID",
+                 "visible": false
+                }
+               ],
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 21987.5,
+                  "y": 1295.67,
+                  "width": 289.5,
+                  "height": 108
+                 },
+                 "characters": "Massa vel sapien pellentesque vulputate lectus. Ut semper sit morbi tempus porta elementum. Ut semper sit morbi tempus porta elementum.",
+                 "absoluteRenderBounds": {
+                  "x": 21988.04,
+                  "y": 1303.6,
+                  "width": 269.49,
+                  "height": 96.37
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "type": "INSTANCE",
+       "name": "Content Media Column",
+       "absoluteBoundingBox": {
+        "x": 22325,
+        "y": 1140.67,
+        "width": 289.5,
+        "height": 263
+       },
+       "children": [
+        {
+         "type": "FRAME",
+         "name": "Media Container",
+         "absoluteBoundingBox": {
+          "x": 22325,
+          "y": 1140.67,
+          "width": 289.5,
+          "height": 105
+         },
+         "children": [
+          {
+           "type": "INSTANCE",
+           "name": "Icon",
+           "absoluteBoundingBox": {
+            "x": 22325,
+            "y": 1140.67,
+            "width": 289.5,
+            "height": 85
+           },
+           "fills": [
+            {
+             "type": "SOLID",
+             "visible": false
+            }
+           ],
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Framed Icon",
+             "absoluteBoundingBox": {
+              "x": 22325,
+              "y": 1140.67,
+              "width": 85,
+              "height": 85
+             },
+             "fills": [
+              {
+               "type": "SOLID"
+              }
+             ],
+             "strokes": [
+              {
+               "type": "SOLID",
+               "opacity": 0.2
+              }
+             ],
+             "strokeWeight": 1,
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Icon",
+               "absoluteBoundingBox": {
+                "x": 22342.5,
+                "y": 1158.17,
+                "width": 50,
+                "height": 50
+               },
+               "children": [
+                {
+                 "type": "VECTOR",
+                 "name": "waving_hand",
+                 "absoluteBoundingBox": {
+                  "x": 22343.49,
+                  "y": 1161.24,
+                  "width": 45.94,
+                  "height": 45.94
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "FRAME",
+         "name": "Content",
+         "absoluteBoundingBox": {
+          "x": 22325,
+          "y": 1245.67,
+          "width": 289.5,
+          "height": 158
+         },
+         "children": [
+          {
+           "type": "SLOT",
+           "name": "Inner Blocks",
+           "absoluteBoundingBox": {
+            "x": 22325,
+            "y": 1245.67,
+            "width": 289.5,
+            "height": 158
+           },
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Inner Block",
+             "absoluteBoundingBox": {
+              "x": 22325,
+              "y": 1245.67,
+              "width": 289.5,
+              "height": 50
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false
+              }
+             ],
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 22325,
+                "y": 1245.67,
+                "width": 289.5,
+                "height": 50
+               },
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 22325,
+                  "y": 1245.67,
+                  "width": 289.5,
+                  "height": 36
+                 },
+                 "characters": "Communication",
+                 "absoluteRenderBounds": {
+                  "x": 22326.32,
+                  "y": 1254.23,
+                  "width": 192.58,
+                  "height": 26.01
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "INSTANCE",
+             "name": "Inner Blocks",
+             "absoluteBoundingBox": {
+              "x": 22325,
+              "y": 1295.67,
+              "width": 289.5,
+              "height": 108
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false
+              }
+             ],
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 22325,
+                "y": 1295.67,
+                "width": 289.5,
+                "height": 108
+               },
+               "fills": [
+                {
+                 "type": "SOLID",
+                 "visible": false
+                }
+               ],
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 22325,
+                  "y": 1295.67,
+                  "width": 289.5,
+                  "height": 108
+                 },
+                 "characters": "Massa vel sapien pellentesque vulputate lectus. Ut semper sit morbi tempus porta elementum. Ut semper sit morbi tempus porta elementum.",
+                 "absoluteRenderBounds": {
+                  "x": 22325.54,
+                  "y": 1303.6,
+                  "width": 269.49,
+                  "height": 96.37
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "type": "INSTANCE",
+       "name": "Content Media Column",
+       "absoluteBoundingBox": {
+        "x": 22662.5,
+        "y": 1140.67,
+        "width": 289.5,
+        "height": 263
+       },
+       "children": [
+        {
+         "type": "FRAME",
+         "name": "Media Container",
+         "absoluteBoundingBox": {
+          "x": 22662.5,
+          "y": 1140.67,
+          "width": 289.5,
+          "height": 105
+         },
+         "children": [
+          {
+           "type": "INSTANCE",
+           "name": "Icon",
+           "absoluteBoundingBox": {
+            "x": 22662.5,
+            "y": 1140.67,
+            "width": 289.5,
+            "height": 85
+           },
+           "fills": [
+            {
+             "type": "SOLID",
+             "visible": false
+            }
+           ],
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Framed Icon",
+             "absoluteBoundingBox": {
+              "x": 22662.5,
+              "y": 1140.67,
+              "width": 85,
+              "height": 85
+             },
+             "fills": [
+              {
+               "type": "SOLID"
+              }
+             ],
+             "strokes": [
+              {
+               "type": "SOLID",
+               "opacity": 0.2
+              }
+             ],
+             "strokeWeight": 1,
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Icon",
+               "absoluteBoundingBox": {
+                "x": 22680.0,
+                "y": 1158.17,
+                "width": 50,
+                "height": 50
+               },
+               "children": [
+                {
+                 "type": "VECTOR",
+                 "name": "rocket_launch",
+                 "absoluteBoundingBox": {
+                  "x": 22683.23,
+                  "y": 1163.44,
+                  "width": 41.76,
+                  "height": 41.81
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "FRAME",
+         "name": "Content",
+         "absoluteBoundingBox": {
+          "x": 22662.5,
+          "y": 1245.67,
+          "width": 289.5,
+          "height": 158
+         },
+         "children": [
+          {
+           "type": "SLOT",
+           "name": "Inner Blocks",
+           "absoluteBoundingBox": {
+            "x": 22662.5,
+            "y": 1245.67,
+            "width": 289.5,
+            "height": 158
+           },
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Inner Block",
+             "absoluteBoundingBox": {
+              "x": 22662.5,
+              "y": 1245.67,
+              "width": 289.5,
+              "height": 50
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false
+              }
+             ],
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 22662.5,
+                "y": 1245.67,
+                "width": 289.5,
+                "height": 50
+               },
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 22662.5,
+                  "y": 1245.67,
+                  "width": 289.5,
+                  "height": 36
+                 },
+                 "characters": "Drive",
+                 "absoluteRenderBounds": {
+                  "x": 22664.21,
+                  "y": 1254.23,
+                  "width": 61.44,
+                  "height": 26.01
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "INSTANCE",
+             "name": "Inner Blocks",
+             "absoluteBoundingBox": {
+              "x": 22662.5,
+              "y": 1295.67,
+              "width": 289.5,
+              "height": 108
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false
+              }
+             ],
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 22662.5,
+                "y": 1295.67,
+                "width": 289.5,
+                "height": 108
+               },
+               "fills": [
+                {
+                 "type": "SOLID",
+                 "visible": false
+                }
+               ],
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 22662.5,
+                  "y": 1295.67,
+                  "width": 289.5,
+                  "height": 108
+                 },
+                 "characters": "Massa vel sapien pellentesque vulputate lectus. Ut semper sit morbi tempus porta elementum. Ut semper sit morbi tempus porta elementum.",
+                 "absoluteRenderBounds": {
+                  "x": 22663.04,
+                  "y": 1303.6,
+                  "width": 269.49,
+                  "height": 96.37
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

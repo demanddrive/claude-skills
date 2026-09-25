@@ -1,0 +1,11 @@
+{
+	"name": "claude-skills",
+	"private": true,
+	"type": "module",
+	"description": "Node dependencies for skills in this repo (figma-visual-diff). Claude Code installs them automatically when the plugin is installed.",
+	"dependencies": {
+		"pixelmatch": "^7.2.0",
+		"playwright": "^1.63.0",
+		"pngjs": "^7.0.0"
+	}
+}
