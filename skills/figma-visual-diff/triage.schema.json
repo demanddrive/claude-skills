@@ -1,0 +1,366 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://github.com/demanddrive/claude-skills/skills/figma-visual-diff/triage.schema.json",
+	"title": "figma-visual-diff triage report",
+	"description": "One breakpoint of a page compared against its Figma frame: every defect, per section (module), with who fixes it, and metrics of how correct the build is. triage.js validates each report against this schema before writing it.",
+	"type": "object",
+	"additionalProperties": false,
+	"required": [ "url", "width", "pass", "unstable", "warnings", "structure", "sections", "metrics" ],
+	"properties": {
+		"url": { "type": "string" },
+		"width": { "type": "integer", "description": "Viewport width in px: the Figma frame's width." },
+		"pass": { "type": "boolean", "description": "True when the render was stable, no section is missing or extra, and every section is ok or dynamic." },
+		"unstable": { "type": "boolean", "description": "The page rendered differently between loads even after a retry; verdicts are unreliable." },
+		"warnings": { "type": "array", "items": { "type": "string" } },
+		"structure": {
+			"description": "Sections missing from the page or not in Figma.",
+			"type": "array",
+			"items": { "$ref": "#/$defs/structureDefect" }
+		},
+		"sections": {
+			"description": "Figma sections that have a page section, in Figma's order.",
+			"type": "array",
+			"items": { "$ref": "#/$defs/section" }
+		},
+		"metrics": { "$ref": "#/$defs/metrics" },
+		"previous": { "type": "string", "description": "The earlier run this one is compared with (a folder name)." },
+		"metricsDelta": {
+			"description": "This run's headline metrics minus the previous run's. Positive correctness and scores, and negative defect counts, are progress.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": [ "correctness", "defects", "pageDefects", "developerDefects", "wireframe", "pixel" ],
+			"properties": {
+				"correctness": { "type": "number" },
+				"defects": { "type": "integer" },
+				"pageDefects": { "type": "integer" },
+				"developerDefects": { "type": "integer" },
+				"wireframe": { "type": "number" },
+				"pixel": { "type": "number" },
+				"expectedCorrectness": { "type": "number", "description": "Present when both runs have Jev diagnoses." }
+			}
+		},
+		"changes": {
+			"description": "Sections whose verdict changed since the previous run.",
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": [ "index", "slug", "after" ],
+				"properties": {
+					"index": { "type": "integer" },
+					"slug": { "type": "string" },
+					"before": { "type": "string" },
+					"after": { "type": "string" }
+				}
+			}
+		}
+	},
+	"$defs": {
+		"count": { "type": "integer", "minimum": 0 },
+		"ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+		"metrics": {
+			"description": "How correct the build is at this breakpoint. Each run also appends these to metrics.jsonl in its page/breakpoint runs folder.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": [ "correctness", "sections", "defects", "scores" ],
+			"properties": {
+				"correctness": { "$ref": "#/$defs/ratio", "description": "Share of Figma sections that are on the page with no defects. Missing sections count against it; masked (dynamic) sections are left out. 1 is a correct build." },
+				"sections": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": [ "figma", "page", "paired", "ok", "dynamic", "withDefects", "missing", "extra" ],
+					"properties": {
+						"figma": { "$ref": "#/$defs/count", "description": "Sections in the Figma frame." },
+						"page": { "$ref": "#/$defs/count", "description": "Sections found on the page." },
+						"paired": { "$ref": "#/$defs/count", "description": "Figma sections matched to a page section." },
+						"ok": { "$ref": "#/$defs/count" },
+						"dynamic": { "$ref": "#/$defs/count" },
+						"withDefects": { "$ref": "#/$defs/count" },
+						"missing": { "$ref": "#/$defs/count", "description": "Figma sections with no page section." },
+						"extra": { "$ref": "#/$defs/count", "description": "Page sections Figma doesn't have." }
+					}
+				},
+				"defects": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": [ "total", "byKind", "byOwner" ],
+					"properties": {
+						"total": { "$ref": "#/$defs/count", "description": "Structure and section defects." },
+						"byKind": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [ "structure", "content", "alignment", "layout", "visual" ],
+							"properties": { "structure": { "$ref": "#/$defs/count" }, "content": { "$ref": "#/$defs/count" }, "alignment": { "$ref": "#/$defs/count" }, "layout": { "$ref": "#/$defs/count" }, "visual": { "$ref": "#/$defs/count" } }
+						},
+						"byOwner": {
+							"type": "object",
+							"additionalProperties": false,
+							"required": [ "page", "developer", "page-or-developer" ],
+							"properties": { "page": { "$ref": "#/$defs/count" }, "developer": { "$ref": "#/$defs/count" }, "page-or-developer": { "$ref": "#/$defs/count" } }
+						}
+					}
+				},
+				"diagnosis": {
+					"description": "Jev's judgement over the diagnosed sections (present when Jev ran).",
+					"type": "object",
+					"additionalProperties": false,
+					"required": [ "model", "diagnosed", "expectedCorrectness", "signedOff", "needsReview", "rejected", "expectedFixes", "negligible" ],
+					"properties": {
+						"model": { "type": "string" },
+						"diagnosed": { "$ref": "#/$defs/count" },
+						"expectedCorrectness": { "$ref": "#/$defs/ratio", "description": "Mean probability that a reviewer accepts each expected section; missing sections count as 0. Calibrated: it estimates the share of sections that would pass review." },
+						"signedOff": { "$ref": "#/$defs/count", "description": "Sections with correct >= 0.8." },
+						"needsReview": { "$ref": "#/$defs/count", "description": "Sections with correct between 0.2 and 0.8: have a person look." },
+						"rejected": { "$ref": "#/$defs/count", "description": "Sections with correct <= 0.2." },
+						"expectedFixes": { "type": "number", "minimum": 0, "description": "Expected number of defects a reviewer would ask to fix: the sum of their `matters`." },
+						"negligible": { "$ref": "#/$defs/count", "description": "Defects a reviewer would very likely not ask to fix (matters <= 0.2)." }
+					}
+				},
+				"scores": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": [ "wireframe", "pixel" ],
+					"properties": {
+						"wireframe": { "$ref": "#/$defs/ratio", "description": "Mean wireframe score of the compared sections." },
+						"pixel": { "$ref": "#/$defs/ratio", "description": "Pixel score of the compared sections, weighted by height." }
+					}
+				}
+			}
+		},
+		"diagnosis": {
+			"description": "Jev's judgement of the section as a whole; each of its defects also carries `matters`.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": [ "model", "correct" ],
+			"properties": {
+				"model": { "type": "string", "description": "The Jev version that answered." },
+				"correct": { "$ref": "#/$defs/ratio", "description": "Probability that a careful reviewer accepts the section as a faithful build." }
+			}
+		},
+		"kind": {
+			"enum": [ "structure", "content", "alignment", "layout", "visual" ],
+			"description": "structure: sections missing, extra or out of order. content: elements missing or extra, or copy differs. alignment: shifted sideways. layout: sizes or spacing differ. visual: geometry matches, pixels don't."
+		},
+		"owner": {
+			"enum": [ "page", "developer", "page-or-developer" ],
+			"description": "page: fixable in the page's blocks and their settings. developer: block CSS or markup. page-or-developer: check the page's theme, colour and size settings first; if they are right, it's styling."
+		},
+		"element": {
+			"description": "A box, in px relative to the top-left of its section on that side (Figma or page).",
+			"type": "object",
+			"additionalProperties": false,
+			"required": [ "type", "x", "y", "w", "h" ],
+			"properties": {
+				"type": { "enum": [ "text", "image", "icon", "surface" ], "description": "surface: a filled or bordered box (card, button, input)." },
+				"x": { "type": "number" },
+				"y": { "type": "number" },
+				"w": { "type": "number" },
+				"h": { "type": "number" },
+				"text": { "type": "string", "description": "A text box's copy, normalised and cut to its first 28 characters." }
+			}
+		},
+		"rect": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": [ "x", "y", "w", "h" ],
+			"properties": { "x": { "type": "number" }, "y": { "type": "number" }, "w": { "type": "number" }, "h": { "type": "number" } }
+		},
+		"margins": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": [ "from" ],
+			"properties": { "from": { "type": "number", "minimum": 0 }, "to": { "type": "number", "minimum": 0 } }
+		},
+		"box": {
+			"description": "Change from Figma to page, in px.",
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"x": { "type": "number" },
+				"y": { "type": "number" },
+				"w": { "type": "number" },
+				"h": { "type": "number" }
+			}
+		},
+		"common": {
+			"type": "object",
+			"required": [ "id", "kind", "issue", "owner", "summary" ],
+			"properties": {
+				"id": { "type": "string", "description": "<section index>.<n>, stable within a run, for referring to one defect (e.g. in a ticket)." },
+				"kind": { "$ref": "#/$defs/kind" },
+				"issue": { "type": "string" },
+				"owner": { "$ref": "#/$defs/owner" },
+				"summary": { "type": "string", "description": "The defect in one line." },
+				"matters": { "$ref": "#/$defs/ratio", "description": "Jev: probability that a careful reviewer would ask for this to be fixed (present when Jev ran)." }
+			}
+		},
+		"defect": {
+			"description": "One difference in a section. `issue` says which fields it carries.",
+			"type": "object",
+			"allOf": [ { "$ref": "#/$defs/common" } ],
+			"unevaluatedProperties": false,
+			"oneOf": [
+				{
+					"description": "A Figma element with no page counterpart.",
+					"properties": { "kind": { "const": "content" }, "issue": { "const": "missing" }, "figma": { "$ref": "#/$defs/element" } },
+					"required": [ "figma" ]
+				},
+				{
+					"description": "A page element Figma doesn't have.",
+					"properties": { "kind": { "const": "content" }, "issue": { "const": "extra" }, "page": { "$ref": "#/$defs/element" } },
+					"required": [ "page" ]
+				},
+				{
+					"description": "Paired text boxes whose copy differs.",
+					"properties": { "kind": { "const": "content" }, "issue": { "const": "copy" }, "figma": { "$ref": "#/$defs/element" }, "page": { "$ref": "#/$defs/element" } },
+					"required": [ "figma", "page" ]
+				},
+				{
+					"description": "An element the same size as in Figma, moved sideways (e.g. centred instead of left).",
+					"properties": { "kind": { "const": "alignment" }, "issue": { "const": "shifted" }, "figma": { "$ref": "#/$defs/element" }, "page": { "$ref": "#/$defs/element" }, "delta": { "$ref": "#/$defs/box" } },
+					"required": [ "figma", "page", "delta" ]
+				},
+				{
+					"description": "The section's content as a whole sits to one side.",
+					"properties": { "kind": { "const": "alignment" }, "issue": { "const": "content-shifted" }, "delta": { "$ref": "#/$defs/box" } },
+					"required": [ "delta" ]
+				},
+				{
+					"description": "The section is taller or shorter than in Figma, beyond the height tolerance.",
+					"properties": { "kind": { "const": "layout" }, "issue": { "const": "height" }, "figma": { "type": "number" }, "page": { "type": "number" }, "delta": { "type": "number" } },
+					"required": [ "figma", "page", "delta" ]
+				},
+				{
+					"description": "A paired element (not an image) of a different size; delta has its width and height change. Elements that only moved aren't defects (the overlays show them). Among the largest offsets only.",
+					"properties": {
+						"kind": { "const": "layout" }, "issue": { "const": "resized" }, "figma": { "$ref": "#/$defs/element" }, "page": { "$ref": "#/$defs/element" }, "delta": { "$ref": "#/$defs/box" },
+						"textBox": { "type": "object", "additionalProperties": false, "required": [ "figma", "page" ], "properties": { "figma": { "type": "number" }, "page": { "type": "number" } }, "description": "Wrapped text: the width of the box its lines run in on each side; delta.w is its change. figma and page w are the ink (longest line)." }
+					},
+					"required": [ "figma", "page", "delta" ]
+				},
+				{
+					"description": "An image with a different aspect ratio (beyond 2%). A scaled image with the same shape is not a defect.",
+					"properties": {
+						"kind": { "const": "layout" }, "issue": { "const": "aspect" },
+						"figma": { "$ref": "#/$defs/element" }, "page": { "$ref": "#/$defs/element" },
+						"ratio": { "type": "object", "additionalProperties": false, "required": [ "figma", "page" ], "properties": { "figma": { "type": "number" }, "page": { "type": "number" } }, "description": "Width divided by height on each side." }
+					},
+					"required": [ "figma", "page", "ratio" ]
+				},
+				{
+					"description": "A visible space differs: between two neighbouring elements, inside an element from its edge to the content nearest it, or from the section's edge to its content. Measured edge to edge, however each side builds it (auto-layout gaps, padding, margins), and only where the same elements bound it on both sides. Counts when the difference is over a quarter of the Figma space, at least 4px and at most the tolerance. One defect per difference; count says how many spaces share it.",
+					"properties": {
+						"kind": { "const": "layout" }, "issue": { "const": "spacing" },
+						"where": { "enum": [ "between", "inside", "edge" ] },
+						"side": { "enum": [ "top", "right", "bottom", "left" ], "description": "inside and edge: which edge of the container or section." },
+						"axis": { "enum": [ "vertical", "horizontal" ], "description": "between: from above to below, or from left to right." },
+						"from": { "$ref": "#/$defs/element", "description": "The Figma element bounding the space: the first of two neighbours, or the content nearest the edge." },
+						"to": { "$ref": "#/$defs/element", "description": "between: the second neighbour (below, or to the right)." },
+						"container": { "$ref": "#/$defs/element", "description": "inside: the element the space is within." },
+						"figma": { "type": "number" }, "page": { "type": "number" }, "delta": { "type": "number" },
+						"margins": {
+							"type": "object", "additionalProperties": false, "required": [ "figma", "page" ],
+							"description": "How much of each side's space is the elements' own vertical margins (in Figma, their Text Block's padding). from: the first neighbour's (margin-bottom) or the edge content's margin toward the edge; to: the second neighbour's (margin-top). The rest is gap or padding.",
+							"properties": { "figma": { "$ref": "#/$defs/margins" }, "page": { "$ref": "#/$defs/margins" } }
+						},
+						"area": {
+							"type": "object", "additionalProperties": false, "required": [ "figma", "page" ],
+							"description": "The space on each side, as a box in section px.",
+							"properties": { "figma": { "$ref": "#/$defs/rect" }, "page": { "$ref": "#/$defs/rect" } }
+						},
+						"count": { "type": "integer", "minimum": 1 }
+					},
+					"required": [ "where", "from", "figma", "page", "delta", "margins", "area", "count" ]
+				},
+				{
+					"description": "The wireframe score is below the threshold without one dominant offset.",
+					"properties": { "kind": { "const": "layout" }, "issue": { "const": "overlap" }, "score": { "type": "number" } },
+					"required": [ "score" ]
+				},
+				{
+					"description": "A design token differs between paired elements: font, font size, line height, weight or text colour; a surface's fill, corner radius or border. One defect per difference; count says how many elements share it.",
+					"properties": {
+						"kind": { "const": "visual" }, "issue": { "const": "style" },
+						"property": { "enum": [ "font", "size", "lh", "weight", "color", "fill", "radius", "stroke", "align", "text-style" ], "description": "text-style: a text style the design uses that no page text has (live sections, where copy differs); figma and page are font/size/line-height/weight/colour, page the closest style used." },
+						"figma": { "type": "string" }, "page": { "type": "string", "description": "Sizes in px, colours as #rrggbb(aa), borders as <colour>/<width>; empty when the page has no text to compare." },
+						"count": { "type": "integer", "minimum": 1 },
+						"element": { "$ref": "#/$defs/element" }
+					},
+					"required": [ "property", "figma", "page", "count", "element" ]
+				},
+				{
+					"description": "Geometry matches but the pixels don't (colour, theme, typography, image content).",
+					"properties": { "kind": { "const": "visual" }, "issue": { "const": "pixels" }, "score": { "type": "number" }, "threshold": { "type": "number" } },
+					"required": [ "score", "threshold" ]
+				}
+			]
+		},
+		"structureDefect": {
+			"type": "object",
+			"allOf": [ { "$ref": "#/$defs/common" } ],
+			"unevaluatedProperties": false,
+			"required": [ "index", "slug", "moved" ],
+			"properties": {
+				"kind": { "const": "structure" },
+				"issue": { "enum": [ "missing", "extra" ], "description": "missing: a Figma section with no page section (index is Figma's). extra: a page section Figma doesn't have (index is the page's)." },
+				"index": { "type": "integer" },
+				"slug": { "type": "string" },
+				"figma": { "type": "string", "description": "The Figma layer name (missing only)." },
+				"moved": { "type": "boolean", "description": "The same slug is both missing and extra: the section is out of order." }
+			}
+		},
+		"section": {
+			"description": "One module: a Figma section and the page block it was paired with.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": [ "index", "slug", "figma", "verdict", "live", "figmaY", "figmaHeight", "pageHeight", "heightDelta", "defects", "images" ],
+			"properties": {
+				"index": { "type": "integer", "description": "1-based position in Figma." },
+				"slug": { "type": "string", "description": "The block slug, e.g. content-media-split." },
+				"figma": { "type": "string", "description": "The Figma layer name." },
+				"verdict": { "enum": [ "ok", "dynamic", "content", "alignment", "layout", "visual" ], "description": "The most severe defect kind; dynamic: a masked section, only its presence is checked." },
+				"live": { "type": "boolean", "description": "Shows live posts: only its template is compared, not text, what's sized by it, item counts or height." },
+				"wireframeScore": { "type": "number" },
+				"pixelScore": { "type": "number" },
+				"pixelHeight": { "type": "integer", "description": "Height of the pixel image: both sections whole, lined up row by row, with gaps where one side has rows the other doesn't." },
+				"pixelRows": {
+					"description": "How the pixel image's rows map to each section's: segments in order, each `length` rows from image row `at`, showing Figma row `figma` and page row `page`. A null side is a gap (grey stripes) where only the other side has rows.",
+					"type": "array",
+					"items": {
+						"type": "object",
+						"additionalProperties": false,
+						"required": [ "at", "figma", "page", "length" ],
+						"properties": {
+							"at": { "type": "integer" },
+							"figma": { "type": [ "integer", "null" ] },
+							"page": { "type": [ "integer", "null" ] },
+							"length": { "type": "integer" }
+						}
+					}
+				},
+				"figmaY": { "type": "number", "description": "The section's top in the Figma frame, px." },
+				"figmaHeight": { "type": "number" },
+				"pageHeight": { "type": "number" },
+				"heightDelta": { "type": "number" },
+				"drift": {
+					"description": "Median offset of all paired elements, and how many changed size: context for layout defects.",
+					"type": "object",
+					"additionalProperties": false,
+					"required": [ "dx", "dy", "resized" ],
+					"properties": { "dx": { "type": "number" }, "dy": { "type": "number" }, "resized": { "type": "integer" } }
+				},
+				"defects": { "type": "array", "items": { "$ref": "#/$defs/defect" } },
+				"diagnosis": { "$ref": "#/$defs/diagnosis" },
+				"images": {
+					"description": "Overlay images, relative to the run folder.",
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"wireframe": { "type": "string", "description": "Figma boxes red, page boxes blue; thick boxes are unmatched." },
+						"pixel": { "type": "string", "description": "Figma | page | diff." }
+					}
+				}
+			}
+		}
+	}
+}

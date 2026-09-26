@@ -1,0 +1,18 @@
+F|1440|367
+S|0|Grid|0|263
+B|0|surface|69|0|85|85|||||fill=#2c3f13;radius=4;stroke=#ffffff33/1
+B|0|icon|87|18|50|50||
+B|0|text|70|105|84|36|ac7bfc28|quality|0|14|font=Barlow;size=28;lh=36.4;weight=700;color=#000000||69/290
+B|0|text|70|155|269|108|35834e72|massa vel sapien pellentesqu|0|0|font=Barlow;size=17;lh=27.2;weight=400;color=#3d3d3d||69/290
+B|0|surface|407|0|85|85|||||fill=#2c3f13;radius=4;stroke=#ffffff33/1
+B|0|icon|424|18|50|50||
+B|0|text|408|105|123|36|22ad5c92|efficiency|0|14|font=Barlow;size=28;lh=36.4;weight=700;color=#000000||407/290
+B|0|text|407|155|269|108|35834e72|massa vel sapien pellentesqu|0|0|font=Barlow;size=17;lh=27.2;weight=400;color=#3d3d3d||407/290
+B|0|surface|744|0|85|85|||||fill=#2c3f13;radius=4;stroke=#ffffff33/1
+B|0|icon|762|18|50|50||
+B|0|text|745|105|193|36|f79a7c05|communication|0|14|font=Barlow;size=28;lh=36.4;weight=700;color=#000000||744/290
+B|0|text|745|155|269|108|35834e72|massa vel sapien pellentesqu|0|0|font=Barlow;size=17;lh=27.2;weight=400;color=#3d3d3d||744/290
+B|0|surface|1082|0|85|85|||||fill=#2c3f13;radius=4;stroke=#ffffff33/1
+B|0|icon|1099|18|50|50||
+B|0|text|1083|105|61|36|9cd6849|drive|0|14|font=Barlow;size=28;lh=36.4;weight=700;color=#000000||1082/290
+B|0|text|1082|155|269|108|35834e72|massa vel sapien pellentesqu|0|0|font=Barlow;size=17;lh=27.2;weight=400;color=#3d3d3d||1082/290

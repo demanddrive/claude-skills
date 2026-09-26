@@ -10,6 +10,7 @@ instead of reinventing the process each time.
 | Skill | What it does |
 |-------|--------------|
 | [`redirect-sheet-creator`](skills/redirect-sheet-creator/) | Builds a 301 redirect sheet mapping a production sitemap onto a new/staging site for a migration — exact + semantic matching, loop/chain validation, Excel workbook output. |
+| [`figma-visual-diff`](skills/figma-visual-diff/) | Compares a built page against its Figma frame per breakpoint and triages every section (structure, content, alignment, layout, visual) with a wireframe diff and a pixel diff. |
 
 ## Installing as a plugin
 
@@ -37,7 +38,8 @@ To have a project offer the skills to everyone who opens it, add to its `.claude
 }
 ```
 
-When a skill changes, bump `version` in `.claude-plugin/plugin.json` so installs pick it up.
+Node dependencies (root `package.json`) install automatically with the plugin. When a skill
+changes, bump `version` in `.claude-plugin/plugin.json` so installs pick it up.
 
 ## Using a skill
 

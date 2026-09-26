@@ -1,0 +1,1296 @@
+{
+ "type": "INSTANCE",
+ "name": "Content Cards (No Bg) / Desktop",
+ "absoluteBoundingBox": {
+  "x": 21581,
+  "y": 1140.66650390625,
+  "width": 1440,
+  "height": 367
+ },
+ "fills": [
+  {
+   "type": "SOLID",
+   "color": {
+    "r": 0.9647058844566345,
+    "g": 0.9803921580314636,
+    "b": 0.9411764740943909,
+    "a": 1
+   }
+  }
+ ],
+ "strokes": [
+  {
+   "type": "SOLID",
+   "color": {
+    "r": 0.800000011920929,
+    "g": 0.800000011920929,
+    "b": 0.800000011920929,
+    "a": 1
+   }
+  }
+ ],
+ "layoutMode": "VERTICAL",
+ "paddingLeft": 68,
+ "paddingRight": 68,
+ "paddingBottom": 104,
+ "children": [
+  {
+   "type": "FRAME",
+   "name": "Grid",
+   "absoluteBoundingBox": {
+    "x": 21649,
+    "y": 1140.66650390625,
+    "width": 1304,
+    "height": 263
+   },
+   "layoutMode": "VERTICAL",
+   "children": [
+    {
+     "type": "FRAME",
+     "name": "Row",
+     "absoluteBoundingBox": {
+      "x": 21650,
+      "y": 1140.66650390625,
+      "width": 1302,
+      "height": 263
+     },
+     "layoutMode": "HORIZONTAL",
+     "children": [
+      {
+       "type": "INSTANCE",
+       "name": "Content Media Column",
+       "absoluteBoundingBox": {
+        "x": 21650,
+        "y": 1140.66650390625,
+        "width": 289.5,
+        "height": 263
+       },
+       "layoutMode": "VERTICAL",
+       "children": [
+        {
+         "type": "FRAME",
+         "name": "Media Container",
+         "absoluteBoundingBox": {
+          "x": 21650,
+          "y": 1140.66650390625,
+          "width": 289.5,
+          "height": 105
+         },
+         "layoutMode": "VERTICAL",
+         "paddingBottom": 20,
+         "children": [
+          {
+           "type": "INSTANCE",
+           "name": "Icon",
+           "absoluteBoundingBox": {
+            "x": 21650,
+            "y": 1140.66650390625,
+            "width": 289.5,
+            "height": 85
+           },
+           "fills": [
+            {
+             "type": "SOLID",
+             "visible": false,
+             "color": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+             }
+            }
+           ],
+           "layoutMode": "VERTICAL",
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Framed Icon",
+             "absoluteBoundingBox": {
+              "x": 21650,
+              "y": 1140.66650390625,
+              "width": 85,
+              "height": 85
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "color": {
+                "r": 0.1725490242242813,
+                "g": 0.24705882370471954,
+                "b": 0.07450980693101883,
+                "a": 1
+               }
+              }
+             ],
+             "strokes": [
+              {
+               "type": "SOLID",
+               "opacity": 0.20000000298023224,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "strokeWeight": 1,
+             "cornerRadius": 4,
+             "layoutMode": "HORIZONTAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Icon",
+               "absoluteBoundingBox": {
+                "x": 21667.5,
+                "y": 1158.16650390625,
+                "width": 50,
+                "height": 49.99992752075195
+               },
+               "children": [
+                {
+                 "type": "VECTOR",
+                 "name": "diamond",
+                 "absoluteBoundingBox": {
+                  "x": 21670.625,
+                  "y": 1165.4581298828125,
+                  "width": 41.66666793823242,
+                  "height": 37.5
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0.7764706015586853,
+                    "g": 0.8901960849761963,
+                    "b": 0.6313725709915161,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "FRAME",
+         "name": "Content",
+         "absoluteBoundingBox": {
+          "x": 21650,
+          "y": 1245.66650390625,
+          "width": 289.5,
+          "height": 158
+         },
+         "layoutMode": "VERTICAL",
+         "children": [
+          {
+           "type": "SLOT",
+           "name": "Inner Blocks",
+           "absoluteBoundingBox": {
+            "x": 21650,
+            "y": 1245.66650390625,
+            "width": 289.5,
+            "height": 158
+           },
+           "layoutMode": "VERTICAL",
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Inner Block",
+             "absoluteBoundingBox": {
+              "x": 21650,
+              "y": 1245.66650390625,
+              "width": 289.5,
+              "height": 50
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "layoutMode": "VERTICAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 21650,
+                "y": 1245.66650390625,
+                "width": 289.5,
+                "height": 50
+               },
+               "layoutMode": "VERTICAL",
+               "paddingBottom": 14,
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 21650,
+                  "y": 1245.66650390625,
+                  "width": 289.5,
+                  "height": 36
+                 },
+                 "absoluteRenderBounds": {
+                  "x": 21651.1484375,
+                  "y": 1254.2265625,
+                  "width": 83.7734375,
+                  "height": 26.011962890625
+                 },
+                 "characters": "Quality",
+                 "style": {
+                  "fontFamily": "Barlow",
+                  "fontWeight": 700,
+                  "fontSize": 28,
+                  "lineHeightPx": 36.39999866485596,
+                  "lineHeightUnit": "FONT_SIZE_%"
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "INSTANCE",
+             "name": "Inner Blocks",
+             "absoluteBoundingBox": {
+              "x": 21650,
+              "y": 1295.66650390625,
+              "width": 289.5,
+              "height": 108
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "layoutMode": "VERTICAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 21650,
+                "y": 1295.66650390625,
+                "width": 289.5,
+                "height": 108
+               },
+               "fills": [
+                {
+                 "type": "SOLID",
+                 "visible": false,
+                 "color": {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1,
+                  "a": 1
+                 }
+                }
+               ],
+               "layoutMode": "HORIZONTAL",
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 21650,
+                  "y": 1295.66650390625,
+                  "width": 289.5,
+                  "height": 108
+                 },
+                 "absoluteRenderBounds": {
+                  "x": 21650.544921875,
+                  "y": 1303.5965576171875,
+                  "width": 269.486328125,
+                  "height": 96.367919921875
+                 },
+                 "characters": "Massa vel sapien pellentesque vulputate lectus. Ut semper sit morbi tempus porta elementum. Ut semper sit morbi tempus porta elementum.",
+                 "style": {
+                  "fontFamily": "Barlow",
+                  "fontWeight": 400,
+                  "fontSize": 17,
+                  "lineHeightPx": 27.200000405311584,
+                  "lineHeightUnit": "FONT_SIZE_%"
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0.239215686917305,
+                    "g": 0.239215686917305,
+                    "b": 0.239215686917305,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "type": "INSTANCE",
+       "name": "Content Media Column",
+       "absoluteBoundingBox": {
+        "x": 21987.5,
+        "y": 1140.66650390625,
+        "width": 289.5,
+        "height": 263
+       },
+       "layoutMode": "VERTICAL",
+       "children": [
+        {
+         "type": "FRAME",
+         "name": "Media Container",
+         "absoluteBoundingBox": {
+          "x": 21987.5,
+          "y": 1140.66650390625,
+          "width": 289.5,
+          "height": 105
+         },
+         "layoutMode": "VERTICAL",
+         "paddingBottom": 20,
+         "children": [
+          {
+           "type": "INSTANCE",
+           "name": "Icon",
+           "absoluteBoundingBox": {
+            "x": 21987.5,
+            "y": 1140.66650390625,
+            "width": 289.5,
+            "height": 85
+           },
+           "fills": [
+            {
+             "type": "SOLID",
+             "visible": false,
+             "color": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+             }
+            }
+           ],
+           "layoutMode": "VERTICAL",
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Framed Icon",
+             "absoluteBoundingBox": {
+              "x": 21987.5,
+              "y": 1140.66650390625,
+              "width": 85,
+              "height": 85
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "color": {
+                "r": 0.1725490242242813,
+                "g": 0.24705882370471954,
+                "b": 0.07450980693101883,
+                "a": 1
+               }
+              }
+             ],
+             "strokes": [
+              {
+               "type": "SOLID",
+               "opacity": 0.20000000298023224,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "strokeWeight": 1,
+             "cornerRadius": 4,
+             "layoutMode": "HORIZONTAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Icon",
+               "absoluteBoundingBox": {
+                "x": 22005,
+                "y": 1158.16650390625,
+                "width": 50,
+                "height": 49.99992752075195
+               },
+               "children": [
+                {
+                 "type": "VECTOR",
+                 "name": "avg_time",
+                 "absoluteBoundingBox": {
+                  "x": 22010.208984375,
+                  "y": 1161.29150390625,
+                  "width": 37.5,
+                  "height": 43.75
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0.7764706015586853,
+                    "g": 0.8901960849761963,
+                    "b": 0.6313725709915161,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "FRAME",
+         "name": "Content",
+         "absoluteBoundingBox": {
+          "x": 21987.5,
+          "y": 1245.66650390625,
+          "width": 289.5,
+          "height": 158
+         },
+         "layoutMode": "VERTICAL",
+         "children": [
+          {
+           "type": "SLOT",
+           "name": "Inner Blocks",
+           "absoluteBoundingBox": {
+            "x": 21987.5,
+            "y": 1245.66650390625,
+            "width": 289.5,
+            "height": 158
+           },
+           "layoutMode": "VERTICAL",
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Inner Block",
+             "absoluteBoundingBox": {
+              "x": 21987.5,
+              "y": 1245.66650390625,
+              "width": 289.5,
+              "height": 50
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "layoutMode": "VERTICAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 21987.5,
+                "y": 1245.66650390625,
+                "width": 289.5,
+                "height": 50
+               },
+               "layoutMode": "VERTICAL",
+               "paddingBottom": 14,
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 21987.5,
+                  "y": 1245.66650390625,
+                  "width": 289.5,
+                  "height": 36
+                 },
+                 "absoluteRenderBounds": {
+                  "x": 21989.20703125,
+                  "y": 1254.2265625,
+                  "width": 122.890625,
+                  "height": 26.011962890625
+                 },
+                 "characters": "Efficiency",
+                 "style": {
+                  "fontFamily": "Barlow",
+                  "fontWeight": 700,
+                  "fontSize": 28,
+                  "lineHeightPx": 36.39999866485596,
+                  "lineHeightUnit": "FONT_SIZE_%"
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "INSTANCE",
+             "name": "Inner Blocks",
+             "absoluteBoundingBox": {
+              "x": 21987.5,
+              "y": 1295.66650390625,
+              "width": 289.5,
+              "height": 108
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "layoutMode": "VERTICAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 21987.5,
+                "y": 1295.66650390625,
+                "width": 289.5,
+                "height": 108
+               },
+               "fills": [
+                {
+                 "type": "SOLID",
+                 "visible": false,
+                 "color": {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1,
+                  "a": 1
+                 }
+                }
+               ],
+               "layoutMode": "HORIZONTAL",
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 21987.5,
+                  "y": 1295.66650390625,
+                  "width": 289.5,
+                  "height": 108
+                 },
+                 "absoluteRenderBounds": {
+                  "x": 21988.044921875,
+                  "y": 1303.5965576171875,
+                  "width": 269.486328125,
+                  "height": 96.367919921875
+                 },
+                 "characters": "Massa vel sapien pellentesque vulputate lectus. Ut semper sit morbi tempus porta elementum. Ut semper sit morbi tempus porta elementum.",
+                 "style": {
+                  "fontFamily": "Barlow",
+                  "fontWeight": 400,
+                  "fontSize": 17,
+                  "lineHeightPx": 27.200000405311584,
+                  "lineHeightUnit": "FONT_SIZE_%"
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0.239215686917305,
+                    "g": 0.239215686917305,
+                    "b": 0.239215686917305,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "type": "INSTANCE",
+       "name": "Content Media Column",
+       "absoluteBoundingBox": {
+        "x": 22325,
+        "y": 1140.66650390625,
+        "width": 289.5,
+        "height": 263
+       },
+       "layoutMode": "VERTICAL",
+       "children": [
+        {
+         "type": "FRAME",
+         "name": "Media Container",
+         "absoluteBoundingBox": {
+          "x": 22325,
+          "y": 1140.66650390625,
+          "width": 289.5,
+          "height": 105
+         },
+         "layoutMode": "VERTICAL",
+         "paddingBottom": 20,
+         "children": [
+          {
+           "type": "INSTANCE",
+           "name": "Icon",
+           "absoluteBoundingBox": {
+            "x": 22325,
+            "y": 1140.66650390625,
+            "width": 289.5,
+            "height": 85
+           },
+           "fills": [
+            {
+             "type": "SOLID",
+             "visible": false,
+             "color": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+             }
+            }
+           ],
+           "layoutMode": "VERTICAL",
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Framed Icon",
+             "absoluteBoundingBox": {
+              "x": 22325,
+              "y": 1140.66650390625,
+              "width": 85,
+              "height": 85
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "color": {
+                "r": 0.1725490242242813,
+                "g": 0.24705882370471954,
+                "b": 0.07450980693101883,
+                "a": 1
+               }
+              }
+             ],
+             "strokes": [
+              {
+               "type": "SOLID",
+               "opacity": 0.20000000298023224,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "strokeWeight": 1,
+             "cornerRadius": 4,
+             "layoutMode": "HORIZONTAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Icon",
+               "absoluteBoundingBox": {
+                "x": 22342.5,
+                "y": 1158.16650390625,
+                "width": 50,
+                "height": 49.99992752075195
+               },
+               "children": [
+                {
+                 "type": "VECTOR",
+                 "name": "waving_hand",
+                 "absoluteBoundingBox": {
+                  "x": 22343.490234375,
+                  "y": 1161.2386474609375,
+                  "width": 45.937503814697266,
+                  "height": 45.9375
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0.7764706015586853,
+                    "g": 0.8901960849761963,
+                    "b": 0.6313725709915161,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "FRAME",
+         "name": "Content",
+         "absoluteBoundingBox": {
+          "x": 22325,
+          "y": 1245.66650390625,
+          "width": 289.5,
+          "height": 158
+         },
+         "layoutMode": "VERTICAL",
+         "children": [
+          {
+           "type": "SLOT",
+           "name": "Inner Blocks",
+           "absoluteBoundingBox": {
+            "x": 22325,
+            "y": 1245.66650390625,
+            "width": 289.5,
+            "height": 158
+           },
+           "layoutMode": "VERTICAL",
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Inner Block",
+             "absoluteBoundingBox": {
+              "x": 22325,
+              "y": 1245.66650390625,
+              "width": 289.5,
+              "height": 50
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "layoutMode": "VERTICAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 22325,
+                "y": 1245.66650390625,
+                "width": 289.5,
+                "height": 50
+               },
+               "layoutMode": "VERTICAL",
+               "paddingBottom": 14,
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 22325,
+                  "y": 1245.66650390625,
+                  "width": 289.5,
+                  "height": 36
+                 },
+                 "absoluteRenderBounds": {
+                  "x": 22326.31640625,
+                  "y": 1254.2265625,
+                  "width": 192.576171875,
+                  "height": 20.6639404296875
+                 },
+                 "characters": "Communication",
+                 "style": {
+                  "fontFamily": "Barlow",
+                  "fontWeight": 700,
+                  "fontSize": 28,
+                  "lineHeightPx": 36.39999866485596,
+                  "lineHeightUnit": "FONT_SIZE_%"
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "INSTANCE",
+             "name": "Inner Blocks",
+             "absoluteBoundingBox": {
+              "x": 22325,
+              "y": 1295.66650390625,
+              "width": 289.5,
+              "height": 108
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "layoutMode": "VERTICAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 22325,
+                "y": 1295.66650390625,
+                "width": 289.5,
+                "height": 108
+               },
+               "fills": [
+                {
+                 "type": "SOLID",
+                 "visible": false,
+                 "color": {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1,
+                  "a": 1
+                 }
+                }
+               ],
+               "layoutMode": "HORIZONTAL",
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 22325,
+                  "y": 1295.66650390625,
+                  "width": 289.5,
+                  "height": 108
+                 },
+                 "absoluteRenderBounds": {
+                  "x": 22325.544921875,
+                  "y": 1303.5965576171875,
+                  "width": 269.486328125,
+                  "height": 96.367919921875
+                 },
+                 "characters": "Massa vel sapien pellentesque vulputate lectus. Ut semper sit morbi tempus porta elementum. Ut semper sit morbi tempus porta elementum.",
+                 "style": {
+                  "fontFamily": "Barlow",
+                  "fontWeight": 400,
+                  "fontSize": 17,
+                  "lineHeightPx": 27.200000405311584,
+                  "lineHeightUnit": "FONT_SIZE_%"
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0.239215686917305,
+                    "g": 0.239215686917305,
+                    "b": 0.239215686917305,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "type": "INSTANCE",
+       "name": "Content Media Column",
+       "absoluteBoundingBox": {
+        "x": 22662.5,
+        "y": 1140.66650390625,
+        "width": 289.5,
+        "height": 263
+       },
+       "layoutMode": "VERTICAL",
+       "children": [
+        {
+         "type": "FRAME",
+         "name": "Media Container",
+         "absoluteBoundingBox": {
+          "x": 22662.5,
+          "y": 1140.66650390625,
+          "width": 289.5,
+          "height": 105
+         },
+         "layoutMode": "VERTICAL",
+         "paddingBottom": 20,
+         "children": [
+          {
+           "type": "INSTANCE",
+           "name": "Icon",
+           "absoluteBoundingBox": {
+            "x": 22662.5,
+            "y": 1140.66650390625,
+            "width": 289.5,
+            "height": 85
+           },
+           "fills": [
+            {
+             "type": "SOLID",
+             "visible": false,
+             "color": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+             }
+            }
+           ],
+           "layoutMode": "VERTICAL",
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Framed Icon",
+             "absoluteBoundingBox": {
+              "x": 22662.5,
+              "y": 1140.66650390625,
+              "width": 85,
+              "height": 85
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "color": {
+                "r": 0.1725490242242813,
+                "g": 0.24705882370471954,
+                "b": 0.07450980693101883,
+                "a": 1
+               }
+              }
+             ],
+             "strokes": [
+              {
+               "type": "SOLID",
+               "opacity": 0.20000000298023224,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "strokeWeight": 1,
+             "cornerRadius": 4,
+             "layoutMode": "HORIZONTAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Icon",
+               "absoluteBoundingBox": {
+                "x": 22680,
+                "y": 1158.16650390625,
+                "width": 50,
+                "height": 49.99992752075195
+               },
+               "children": [
+                {
+                 "type": "VECTOR",
+                 "name": "rocket_launch",
+                 "absoluteBoundingBox": {
+                  "x": 22683.228515625,
+                  "y": 1163.4359130859375,
+                  "width": 41.764060974121094,
+                  "height": 41.81367492675781
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0.7764706015586853,
+                    "g": 0.8901960849761963,
+                    "b": 0.6313725709915161,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "FRAME",
+         "name": "Content",
+         "absoluteBoundingBox": {
+          "x": 22662.5,
+          "y": 1245.66650390625,
+          "width": 289.5,
+          "height": 158
+         },
+         "layoutMode": "VERTICAL",
+         "children": [
+          {
+           "type": "SLOT",
+           "name": "Inner Blocks",
+           "absoluteBoundingBox": {
+            "x": 22662.5,
+            "y": 1245.66650390625,
+            "width": 289.5,
+            "height": 158
+           },
+           "layoutMode": "VERTICAL",
+           "children": [
+            {
+             "type": "INSTANCE",
+             "name": "Inner Block",
+             "absoluteBoundingBox": {
+              "x": 22662.5,
+              "y": 1245.66650390625,
+              "width": 289.5,
+              "height": 50
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "layoutMode": "VERTICAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 22662.5,
+                "y": 1245.66650390625,
+                "width": 289.5,
+                "height": 50
+               },
+               "layoutMode": "VERTICAL",
+               "paddingBottom": 14,
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 22662.5,
+                  "y": 1245.66650390625,
+                  "width": 289.5,
+                  "height": 36
+                 },
+                 "absoluteRenderBounds": {
+                  "x": 22664.20703125,
+                  "y": 1254.2265625,
+                  "width": 61.4375,
+                  "height": 20.6639404296875
+                 },
+                 "characters": "Drive",
+                 "style": {
+                  "fontFamily": "Barlow",
+                  "fontWeight": 700,
+                  "fontSize": 28,
+                  "lineHeightPx": 36.39999866485596,
+                  "lineHeightUnit": "FONT_SIZE_%"
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "INSTANCE",
+             "name": "Inner Blocks",
+             "absoluteBoundingBox": {
+              "x": 22662.5,
+              "y": 1295.66650390625,
+              "width": 289.5,
+              "height": 108
+             },
+             "fills": [
+              {
+               "type": "SOLID",
+               "visible": false,
+               "color": {
+                "r": 1,
+                "g": 1,
+                "b": 1,
+                "a": 1
+               }
+              }
+             ],
+             "layoutMode": "VERTICAL",
+             "children": [
+              {
+               "type": "INSTANCE",
+               "name": "Text Block",
+               "absoluteBoundingBox": {
+                "x": 22662.5,
+                "y": 1295.66650390625,
+                "width": 289.5,
+                "height": 108
+               },
+               "fills": [
+                {
+                 "type": "SOLID",
+                 "visible": false,
+                 "color": {
+                  "r": 1,
+                  "g": 1,
+                  "b": 1,
+                  "a": 1
+                 }
+                }
+               ],
+               "layoutMode": "HORIZONTAL",
+               "children": [
+                {
+                 "type": "TEXT",
+                 "name": "Text",
+                 "absoluteBoundingBox": {
+                  "x": 22662.5,
+                  "y": 1295.66650390625,
+                  "width": 289.5,
+                  "height": 108
+                 },
+                 "absoluteRenderBounds": {
+                  "x": 22663.044921875,
+                  "y": 1303.5965576171875,
+                  "width": 269.486328125,
+                  "height": 96.367919921875
+                 },
+                 "characters": "Massa vel sapien pellentesque vulputate lectus. Ut semper sit morbi tempus porta elementum. Ut semper sit morbi tempus porta elementum.",
+                 "style": {
+                  "fontFamily": "Barlow",
+                  "fontWeight": 400,
+                  "fontSize": 17,
+                  "lineHeightPx": 27.200000405311584,
+                  "lineHeightUnit": "FONT_SIZE_%"
+                 },
+                 "fills": [
+                  {
+                   "type": "SOLID",
+                   "color": {
+                    "r": 0.239215686917305,
+                    "g": 0.239215686917305,
+                    "b": 0.239215686917305,
+                    "a": 1
+                   }
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
