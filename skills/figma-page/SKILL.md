@@ -39,10 +39,24 @@ Each breakpoint's width is its viewport. Build from the widest; every breakpoint
 
 `get_metadata` on the widest frame lists its top-level sections; navigation, header and footer
 are site chrome. Then `get_design_context` one section at a time (a whole page overflows):
-copy, text styles, images. Only visible layers are content.
+copy, text styles, images.
 
-Done when every breakpoint frame is known and every content section has its copy, text
-styles and image URLs.
+**Hidden states.** Sliders, tabs, accordions and sticky media splits keep their other states
+(slides 2 to N, each step's media) as hidden layers, which `get_design_context` leaves out. In
+each such section, list the hidden layers with a `use_figma` script that only reads
+(`section.findAll(n => !n.visible)`). A hidden layer is a **proven** state when it is both:
+
+- a state: a sibling of a visible item with the same structure (layer types and size), or a
+  named state (a variant like `Slide=2`, a frame named for the state);
+- filled: it holds text or an image.
+
+Take each proven state's copy and images from `get_design_context` on its node id, ordered by
+its name or its place in the layers panel. A section's items are exactly its visible items and
+its proven states. Every other hidden layer, and a proven state that returns no image, goes to
+the report with its node id and name; unhiding a layer is the designer's call.
+
+Done when every breakpoint frame is known, every content section has its copy, text styles
+and image URLs, and every hidden layer in an interactive section is proven or listed.
 
 ## 2. Map sections to blocks
 
@@ -106,5 +120,8 @@ with the setting you ruled out.
 - The section → block table.
 - Developer tasks: each developer defect as `id`, block slug, `summary` and why no setting
   fixes it, plus sections needing a new block.
+- Interactive sections: each block's item count and the node id behind every item, e.g.
+  `image-slider: 4 — 12:301 (visible), 12:302, 12:303, 12:304 (hidden)`. The diff sees only a
+  slider's first slide, so these ids are the check on the rest.
 - Needs a decision: refused replacements, site data (item counts, form setup), design
-  differences between breakpoints.
+  differences between breakpoints, hidden layers that aren't proven states.

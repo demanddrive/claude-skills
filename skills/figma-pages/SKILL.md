@@ -62,4 +62,4 @@ Done when every page has a report or a stated failure.
   same block with the same defect on several pages (a margin, a font size) is one task
   naming each page and defect `id`. Sections that need a new block are tasks for figma-block.
 - **Needs a decision:** refused replacements, site data (post counts, form setup), design
-  differences between breakpoints.
+  differences between breakpoints, hidden layers that aren't proven states.
