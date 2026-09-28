@@ -18,8 +18,9 @@ import { DEFAULTS, importFigma, parseArgs, pruneRuns, sameSection, triageSection
 import { appendHistory, buildMetrics, metricsDelta } from '../scripts/lib/metrics.js';
 import { colourDistance, defectFacts, diagnose, jevEndpoint, moduleQuestions, moduleState } from '../scripts/lib/jev.js';
 import { disagreements, inPixelImage, renderReport } from '../scripts/lib/report-html.js';
-import { analyseSection, MAX_OFFSETS, matchBoxes, mergeFigmaRuns, mergeTextRuns, missingTextStyles, paddingOf, pairSections, pairStructure, sameToken, sectionScore, spacingTolerance, styleDiffs, uniqueBoxes } from '../scripts/lib/boxes.js';
+import { analyseSection, drawsEdge, MAX_OFFSETS, matchBoxes, mergeFigmaRuns, mergeTextRuns, missingTextStyles, paddingOf, pairSections, pairStructure, sameToken, sectionScore, spacingTolerance, styleDiffs, uniqueBoxes } from '../scripts/lib/boxes.js';
 import { cacheBusted } from '../scripts/lib/browser.js';
+import { tokenValue } from '../scripts/lib/defects.js';
 import { parseFlags, sectionImage } from '../scripts/lib/cli.js';
 import { extractBoxes, figmaScript, figmaSlug, hash, normText, parseFigma, TEXT_PREFIX, tileSections } from '../scripts/lib/figma.js';
 import { compareSection, mediaMask, readAnchors, REFINE, renderScale } from '../scripts/lib/pixels.js';
@@ -358,7 +359,7 @@ test( 'section mode treats the node as one section, via REST and in Figma', asyn
 	const node = JSON.parse( fs.readFileSync( path.join( here, 'fixtures', 'rest-section.json' ), 'utf8' ) );
 	const expected = fs.readFileSync( path.join( here, 'fixtures', 'rest-section.single.expected.txt' ), 'utf8' ).trim();
 	assert.equal( extract( node, true ), expected );
-	assert.deepEqual( expected.split( '\n' ).filter( ( l ) => l.startsWith( 'S|' ) ), [ `S|0|${ node.name }|0|${ Math.round( node.absoluteBoundingBox.height ) }` ] );
+	assert.deepEqual( expected.split( '\n' ).filter( ( l ) => l.startsWith( 'S|' ) ), [ `S|0|${ node.name }|0|${ Math.round( node.absoluteBoundingBox.height ) }|1` ] );
 
 	// The script printed for use_figma, run against the same node, gives the same output.
 	const code = ( ...flags ) => execFileSync( process.execPath, [ path.join( here, '..', 'scripts', 'config.js' ), 'figma-boxes', '1:2', ...flags ], { encoding: 'utf8' } );
@@ -787,7 +788,7 @@ test( 'config.js prints the Figma extractor ready to run unchanged, with the pro
 	const out = await new AsyncFunction( 'figma', code )( { getNodeByIdAsync: async ( id ) => ( requested.push( id ), frame ) } );
 
 	assert.deepEqual( requested, [ '16233:18647' ], 'the node id uses Figma\'s colon form' );
-	assert.deepEqual( out.split( '\n' ).filter( ( l ) => l.startsWith( 'S|' ) ), [ 'S|0|Hero / Desktop|100|100' ], 'ignored layers are not sections' );
+	assert.deepEqual( out.split( '\n' ).filter( ( l ) => l.startsWith( 'S|' ) ), [ 'S|0|Hero / Desktop|100|100|1' ], 'ignored layers are not sections' );
 } );
 
 test( 'triage accepts --section for a single block', () => {
@@ -1073,8 +1074,8 @@ test( 'inside Figma, nodes without a property (groups, rectangles, text) are rea
 		scene( 'FRAME', abs( 0, 0, 1440, 400 ), { fills: [], strokes: [], strokeWeight: 0, layoutMode: 'VERTICAL', paddingTop: 104, paddingBottom: 104, paddingLeft: 68, paddingRight: 68, cornerRadius: 0, clipsContent: true, children: [ group ] } ),
 	] } );
 	const lines = extract( frame ).split( '\n' );
-	assert.ok( lines.includes( 'B|0|text|68|104|300|36|ac7bfc28|quality|0|0|font=Barlow;size=28;lh=36.4;weight=700;color=#000000||68/300' ), lines.join( '\n' ) );
-	assert.ok( lines.includes( 'B|0|surface|68|160|200|100|||||fill=#ffffff;radius=8' ), lines.join( '\n' ) );
+	assert.ok( lines.includes( 'B|0|text|68|104|300|36|ac7bfc28|quality|0|0|font=Barlow;size=28;lh=36.4;weight=700;color=#000000;italic=normal;deco=none;case=title;runs=1||68/300' ), lines.join( '\n' ) );
+	assert.ok( lines.includes( 'B|0|surface|68|160|200|100|||||fill=#ffffff;radius=8;stroke=none' ), lines.join( '\n' ) );
 } );
 
 test( 'design tokens compare as the two sides spell them, and differences group by value', () => {
@@ -1084,6 +1085,12 @@ test( 'design tokens compare as the two sides spell them, and differences group 
 	assert.ok( sameToken( 'fill', '#ffffff33', '#ffffff34' ) && ! sameToken( 'fill', '#ffffff33', '#ffffff' ), 'alpha counts; none is opaque' );
 	assert.ok( sameToken( 'lh', '27.2', '27' ) && ! sameToken( 'lh', '27.2', '30' ) );
 	assert.ok( sameToken( 'stroke', '#ffffff33/1', '#ffffff33/1' ) && ! sameToken( 'stroke', '#ffffff33/1', '#ffffff33/2' ) );
+	// Per side and per corner: one value stands for all four.
+	assert.ok( sameToken( 'stroke', '#cccccc/1', '#cccccc/1 #cccccc/1 #cccccc/1 #cccccc/1' ) );
+	assert.ok( ! sameToken( 'stroke', '#cccccc/1', 'none none #cccccc/1 none' ), 'a bottom-only divider is not a full border' );
+	assert.ok( sameToken( 'stroke', 'none none #cccccc/1 none', 'none none #cdcdcd/1 none' ) && ! sameToken( 'stroke', 'none', '#cccccc/1' ) );
+	assert.ok( sameToken( 'stroke', '#ffffff00/1', 'none' ), 'a fully transparent border is none (files extracted before transparent strokes were dropped)' );
+	assert.ok( sameToken( 'radius', '8', '8 8 8 8' ) && sameToken( 'radius', '8 8 0 0', '8 7 0 0' ) && ! sameToken( 'radius', '8', '8 8 0 0' ) );
 	const title = ( x ) => ( { type: 'text', x, y: 0, w: 100, h: 36, text: 'quality', hash: 'ac7bfc28', style: { font: 'Barlow', size: '28', lh: '36.4', weight: '700', color: '#000000' } } );
 	const pageTitle = ( x ) => ( { ...title( x ), style: { font: 'Barlow', size: '24', lh: '36.4', weight: '700', color: '#000000' } } );
 	const diffs = styleDiffs( [ 0, 300, 600 ].map( ( x ) => ( { f: title( x ), p: pageTitle( x ) } ) ) );
@@ -1174,14 +1181,178 @@ test( 'text size is compared only between the same words', () => {
 test( 'a Figma frame behind an image is that image\'s border, not a missing element; hidden fills are not compared', () => {
 	const img = { type: 'image', x: 68, y: 104, w: 628, h: 419 };
 	const frame = { type: 'surface', x: 68, y: 104, w: 628, h: 419, style: { radius: '6', stroke: '#cccccc/1' } };
-	const a = analyse( [ frame, img ], [ { ...img } ] );
+	// The page's corners come from a wrapper clipping the img (see extractPageBoxes): 4px, no border.
+	const a = analyse( [ frame, { ...img, style: { radius: '6', stroke: 'none' } } ], [ { ...img, style: { radius: '4', stroke: 'none' } } ] );
 	assert.deepEqual( a.missing, [], 'not a missing surface' );
-	assert.deepEqual( a.styles.map( ( d ) => [ d.property, d.figma, d.page ] ), [ [ 'stroke', '#cccccc/1', 'none' ] ] );
+	assert.deepEqual( a.styles.map( ( d ) => [ d.property, d.figma, d.page ] ), [ [ 'radius', '6', '4' ], [ 'stroke', '#cccccc/1', 'none' ] ], 'the frame\'s corners and border are the image\'s' );
+	assert.deepEqual( analyse( [ frame, { ...img, style: { radius: '6', stroke: 'none' } } ], [ { ...img, style: { radius: '6', stroke: '#cccccc/1' } } ] ).styles, [], 'a page image with the same corners and border matches' );
+	// A square frame around a rounded image: the image's own corners stand.
+	const square = { ...frame, style: { radius: '0', stroke: '#cccccc/1' } };
+	assert.deepEqual( analyse( [ square, { ...img, style: { radius: '8', stroke: 'none' } } ], [ { ...img, style: { radius: '8', stroke: '#cccccc/1' } } ] ).styles, [] );
+	// A frame rounded 8px around a photo rounded 16px: the rounder corners show.
+	assert.deepEqual( analyse( [ { ...frame, style: { radius: '8', stroke: 'none' } }, { ...img, style: { radius: '16', stroke: 'none' } } ], [ { ...img, style: { radius: '16', stroke: 'none' } } ] ).styles, [] );
+	// A fill behind a bordered photo: the photo's own border stands.
+	const backing = { ...frame, style: { fill: '#ffffff', radius: '0', stroke: 'none' } };
+	const bordered = { ...img, style: { radius: '0', stroke: '#3d3d3d/2' } };
+	assert.deepEqual( analyse( [ backing, bordered ], [ { ...bordered } ] ).styles, [] );
+	assert.deepEqual( analyse( [ backing, bordered ], [ { ...img, style: { radius: '0', stroke: 'none' } } ] ).styles.map( ( d ) => d.property ), [ 'stroke' ] );
 	const card = ( fill ) => ( { type: 'surface', x: 12, y: 0, w: 702, h: 500, style: { fill, radius: '6' } } );
 	const photo = { type: 'image', x: 12, y: 0, w: 702, h: 500 };
 	assert.deepEqual( analyse( [ card( '#000000' ), photo ], [ card( '#2c3f13' ), { ...photo } ] ).styles, [], 'a fill under a full-cover image on both sides can\'t be seen' );
 	const pill = { type: 'surface', x: 600, y: 400, w: 52, h: 52, style: { fill: '#b0c890' } };
 	assert.equal( analyse( [ pill ], [ { ...pill, style: { fill: '#c6e3a1' } } ] ).styles.length, 1, 'an uncovered fill still is' );
+} );
+
+test( 'no false border or corner defects: stored files, borders drawn another way, frames that may not clip', () => {
+	const analyse = ( fig, pg ) => analyseSection( { height: 600, boxes: fig }, { height: 600, boxes: pg }, { tolerance: 8, live: false, width: 1440 } );
+	const props = ( fig, pg ) => analyse( fig, pg ).styles.map( ( d ) => [ d.property, d.figma, d.page ] );
+	const pill = { type: 'surface', x: 68, y: 100, w: 120, h: 40 };
+	// A Figma file extracted before radii were fitted to the box records a pill as 999.
+	assert.deepEqual( props( [ { ...pill, style: { radius: '999' } } ], [ { ...pill, style: { radius: '20', stroke: 'none' } } ] ), [], 'a pill is a pill' );
+	assert.deepEqual( props( [ { ...pill, style: { radius: '999' } } ], [ { ...pill, style: { radius: '6', stroke: 'none' } } ] ), [ [ 'radius', '20', '6' ] ], 'reported as drawn' );
+	// A border on one side only: the other may draw the same line another way (a divider element,
+	// a ::after rule, a box-shadow ring), so that is not compared.
+	const row = { type: 'surface', x: 68, y: 200, w: 600, h: 60 };
+	assert.deepEqual( props( [ { ...row, style: { stroke: 'none' } } ], [ { ...row, style: { stroke: 'none none #cccccc/1 none' } } ] ), [] );
+	assert.deepEqual( props( [ { ...row, style: { stroke: '#cccccc/1' } } ], [ { ...row, style: { stroke: 'none' } } ] ), [] );
+	// A stored Figma file records a border's sides as one: which sides it has isn't known.
+	assert.deepEqual( props( [ { ...row, style: { stroke: '#cccccc/1' } } ], [ { ...row, style: { stroke: 'none none #cccccc/1 none' } } ] ), [] );
+	// Both sides bordered alike, or differently where both have one: compared side by side.
+	assert.deepEqual( props( [ { ...row, style: { stroke: 'none none #cccccc/1 none' } } ], [ { ...row, style: { stroke: 'none none #3d3d3d/1 none' } } ] ).map( ( d ) => d[ 0 ] ), [ 'stroke' ] );
+	// An image in a stored file carries no corners: a frame behind it may or may not clip it, so its
+	// radius isn't guessed; its border, drawn over the photo either way, still is.
+	const img = { type: 'image', x: 68, y: 104, w: 628, h: 419 };
+	const frame = { type: 'surface', x: 68, y: 104, w: 628, h: 419, style: { radius: '6', stroke: '#cccccc/1' } };
+	assert.deepEqual( props( [ frame, img ], [ { ...img, style: { radius: '4', stroke: 'none' } } ] ), [ [ 'stroke', '#cccccc/1', 'none' ] ] );
+	assert.deepEqual( props( [ frame, img ], [ { ...img } ] ), [ [ 'stroke', '#cccccc/1', 'none' ] ], 'a page image without tokens has no border' );
+	// A carousel's cut-off photo shows only part of its frame: not compared.
+	const slide = { type: 'image', x: 1200, y: 104, w: 240, h: 419, clipped: true, style: { radius: '6', stroke: 'none' } };
+	assert.deepEqual( props( [ { ...frame, x: 1200, w: 240, clipped: true }, slide ], [ { ...slide, style: { radius: '4', stroke: 'none' } } ] ), [] );
+} );
+
+test( 'Figma records every line a section draws; files from before record none', () => {
+	const abs = ( x, y, width, height ) => ( { x, y, width, height } );
+	const grey = [ { type: 'SOLID', visible: true, color: { r: 0.8, g: 0.8, b: 0.8, a: 1 } } ];
+	const shadow = ( radius ) => [ { type: 'DROP_SHADOW', visible: true, radius, spread: 1, offset: { x: 0, y: 0 }, color: { r: 0, g: 0, b: 0, a: 0.2 } } ];
+	const frame = { type: 'FRAME', name: 'Page', absoluteBoundingBox: abs( 0, 0, 1440, 400 ), children: [ {
+		type: 'FRAME', name: 'Rows / Desktop', absoluteBoundingBox: abs( 0, 0, 1440, 400 ), children: [
+			{ type: 'LINE', name: 'Divider', absoluteBoundingBox: abs( 68, 59, 600, 0 ), strokes: grey, strokeWeight: 1 },
+			{ type: 'RECTANGLE', name: 'Rule', absoluteBoundingBox: abs( 68, 119, 600, 1 ), fills: grey, strokes: [] },
+			{ type: 'FRAME', name: 'Ringed', absoluteBoundingBox: abs( 68, 140, 600, 40 ), fills: [], strokes: [], effects: shadow( 0 ) },
+			{ type: 'FRAME', name: 'Soft', absoluteBoundingBox: abs( 68, 200, 600, 40 ), fills: [], strokes: [], effects: shadow( 24 ) },
+			{ type: 'FRAME', name: 'Underlined', absoluteBoundingBox: abs( 700, 140, 600, 40 ), fills: [], strokes: [], effects: [ { type: 'DROP_SHADOW', visible: true, radius: 0, spread: 0, offset: { x: 0, y: 2 }, color: { r: 0, g: 0, b: 0, a: 1 } } ] },
+			{ type: 'FRAME', name: 'Far shadow', absoluteBoundingBox: abs( 700, 200, 600, 40 ), fills: [], strokes: [], effects: [ { type: 'DROP_SHADOW', visible: true, radius: 0, spread: 0, offset: { x: 0, y: 20 }, color: { r: 0, g: 0, b: 0, a: 1 } } ] },
+			{ type: 'ELLIPSE', name: 'Ring', absoluteBoundingBox: abs( 700, 260, 40, 40 ), fills: [], strokes: grey, strokeWeight: 1 },
+			{ type: 'VECTOR', name: 'Straight', absoluteBoundingBox: abs( 700, 380, 600, 0 ), fills: [], strokes: grey, strokeWeight: 1 },
+			// A rule outside the mask above it is hidden: no line.
+			{ type: 'GROUP', name: 'Masked rule', absoluteBoundingBox: abs( 700, 400, 600, 60 ), children: [
+				{ type: 'RECTANGLE', name: 'Mask', isMask: true, absoluteBoundingBox: abs( 700, 400, 600, 20 ), fills: grey, strokes: [] },
+				{ type: 'RECTANGLE', name: 'Hidden rule', absoluteBoundingBox: abs( 700, 459, 600, 1 ), fills: grey, strokes: [] },
+			] },
+			{ type: 'FRAME', name: 'Shrunk', absoluteBoundingBox: abs( 700, 480, 600, 40 ), fills: [], strokes: [], effects: [ { type: 'DROP_SHADOW', visible: true, radius: 0, spread: -20, offset: { x: 0, y: 2 }, color: { r: 0, g: 0, b: 0, a: 1 } } ] },
+			{ type: 'GROUP', name: 'Masked', absoluteBoundingBox: abs( 700, 320, 600, 40 ), children: [
+				{ type: 'RECTANGLE', name: 'Mask', isMask: true, absoluteBoundingBox: abs( 700, 320, 600, 40 ), fills: grey, strokes: grey, strokeWeight: 1 },
+			] },
+			// A fully transparent stroke draws nothing, nor does a divider its clipping frame hides.
+			{ type: 'RECTANGLE', name: 'Clear', absoluteBoundingBox: abs( 68, 260, 600, 40 ), fills: [], strokes: [ { type: 'SOLID', visible: true, opacity: 0, color: { r: 0, g: 0, b: 0, a: 1 } } ], strokeWeight: 1 },
+			{ type: 'FRAME', name: 'Clipper', clipsContent: true, absoluteBoundingBox: abs( 68, 320, 600, 40 ), fills: [], strokes: [], children: [
+				{ type: 'RECTANGLE', name: 'Hidden rule', absoluteBoundingBox: abs( 68, 380, 600, 1 ), fills: grey, strokes: [] },
+			] },
+		],
+	} ] };
+	const figmaFile = path.join( fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-lines-' ) ), 'figma-boxes.txt' );
+	fs.writeFileSync( figmaFile, extract( frame ) );
+	const [ section ] = parseFigma( figmaFile, DEFAULT_CONFIG ).sections;
+	const edge = ( y, h, side ) => drawsEdge( section.lines, { x: 68, y, w: 600, h }, side );
+	assert.deepEqual( [ edge( 20, 40, 2 ), edge( 80, 40, 2 ), edge( 140, 40, 0 ) ], [ true, true, true ], 'a LINE, a thin rectangle, a tight shadow' );
+	assert.equal( edge( 200, 40, 0 ), false, 'a soft shadow draws no line' );
+	const at700 = ( side ) => drawsEdge( section.lines, { x: 700, y: 140, w: 600, h: 40 }, side );
+	assert.deepEqual( [ 0, 1, 2, 3 ].map( at700 ), [ false, false, true, false ], 'a shadow offset down draws the bottom only' );
+	const box = ( y, w = 600, h = 40 ) => [ 0, 1, 2, 3 ].some( ( side ) => drawsEdge( section.lines, { x: 700, y, w, h }, side ) );
+	assert.deepEqual( [ box( 200 ), box( 260, 40, 40 ), box( 320 ) ], [ false, false, false ], 'a shadow 20px off, a circle\'s outline and a mask draw no box edge' );
+	assert.ok( drawsEdge( section.lines, { x: 700, y: 340, w: 600, h: 40 }, 2 ), 'a straight vector line does' );
+	assert.deepEqual( [ drawsEdge( section.lines, { x: 700, y: 420, w: 600, h: 40 }, 2 ), box( 480 ) ], [ false, false ], 'a rule a mask hides, and a shadow spread in 20px, draw nothing' );
+	assert.equal( edge( 260, 40, 0 ), false, 'nor a transparent stroke' );
+	assert.equal( edge( 340, 40, 2 ), false, 'nor a rule its clipping frame hides' );
+	// A file from before lines were recorded: what it draws is unknown, not nothing.
+	fs.writeFileSync( figmaFile, 'F|1440|400\nS|0|Rows / Desktop|0|400\n' );
+	assert.equal( parseFigma( figmaFile, DEFAULT_CONFIG ).sections[ 0 ].lines, undefined );
+} );
+
+test( 'a Figma text\'s style is the one on most of its letters, from styled segments or REST overrides', () => {
+	const abs = ( x, y, width, height ) => ( { x, y, width, height } );
+	const black = [ { type: 'SOLID', visible: true, color: { r: 0, g: 0, b: 0, a: 1 } } ];
+	const seg = ( characters, extra = {} ) => ( {
+		characters, fontName: { family: 'Barlow', style: 'Regular' }, fontSize: 20, fontWeight: 400, fills: black,
+		lineHeight: { unit: 'PIXELS', value: 30 }, letterSpacing: { unit: 'PIXELS', value: 0 }, textDecoration: 'NONE', textCase: 'ORIGINAL', ...extra,
+	} );
+	// The plugin API: styled segments.
+	const plugin = ( name, y, segments ) => ( { type: 'TEXT', name, characters: segments.map( ( g ) => g.characters ).join( '' ), absoluteBoundingBox: abs( 68, y, 400, 30 ), getStyledTextSegments: () => segments } );
+	// REST: a base style and per-character overrides.
+	const rest = ( name, y, characters, overrides, table ) => ( { type: 'TEXT', name, characters, absoluteBoundingBox: abs( 68, y, 400, 30 ), fills: black,
+		style: { fontFamily: 'Barlow', italic: false, fontWeight: 400, fontSize: 20, lineHeightPx: 30, letterSpacing: 0 }, characterStyleOverrides: overrides, styleOverrideTable: table } );
+	const frame = { type: 'FRAME', name: 'Page', absoluteBoundingBox: abs( 0, 0, 1440, 400 ), children: [ { type: 'FRAME', name: 'Text / Desktop', absoluteBoundingBox: abs( 0, 0, 1440, 400 ), children: [
+		plugin( 'Mostly', 0, [ seg( 'Built for ' ), seg( 'every', { fontWeight: 700, fontName: { family: 'Barlow', style: 'Bold' } } ), seg( ' property type' ) ] ),
+		plugin( 'Halves', 40, [ seg( 'Half bold', { fontWeight: 700 } ), seg( ' half not' ) ] ),
+		plugin( 'Eyebrow', 80, [ seg( 'how we work', { textCase: 'UPPER', letterSpacing: { unit: 'PERCENT', value: 10 } } ) ] ),
+		plugin( 'Fancy', 120, [ seg( 'Emphasised link', { fontName: { family: 'Barlow', style: 'Bold Italic' }, textDecoration: 'UNDERLINE' } ) ] ),
+		rest( 'Rest', 160, 'Plain words then two bold', [ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1 ], { 1: { fontWeight: 700 } } ),
+		plugin( 'Small caps', 200, [ seg( 'small caps', { textCase: 'SMALL_CAPS' } ) ] ),
+		plugin( 'Split title', 240, [ seg( 'hel', { textCase: 'TITLE' } ), seg( 'lo world', { textCase: 'TITLE', fontWeight: 700 } ) ] ),
+	] } ] };
+	const styles = extract( frame ).split( '\n' ).filter( ( l ) => l.includes( '|text|' ) ).map( ( l ) => Object.fromEntries( l.split( '|' )[ 11 ].split( ';' ).map( ( kv ) => kv.split( '=' ) ) ) );
+	const [ mostly, halves, eyebrow, fancy, restText, smallCaps, splitTitle ] = styles;
+	assert.equal( splitTitle.case, 'title', 'title case across a run boundary inside a word' );
+	assert.deepEqual( [ mostly.weight, mostly.case, mostly.runs ], [ '400', 'sentence', '1' ], 'one bold word of five' );
+	assert.equal( halves.weight, undefined, 'no weight on most of the letters: none' );
+	assert.deepEqual( [ eyebrow.case, eyebrow.ls ], [ 'upper', '2' ], 'textCase applied; 10% of 20px' );
+	assert.deepEqual( [ fancy.italic, fancy.deco ], [ 'italic', 'underline' ] );
+	assert.equal( restText.weight, '400', 'REST overrides, weighed by letters' );
+	assert.equal( smallCaps.case, undefined, 'small caps render neither case' );
+} );
+
+test( 'page paragraphs merged into one Figma text weigh their letters together', () => {
+	const para = ( y, words, weight, letters, textCase, rendered = words ) => ( { type: 'text', x: 68, y, w: 400, h: 24, text: words, full: words, hash: hash( words ),
+		style: { weight, case: textCase }, style0: { weight }, tally: { weight: [ [ weight, letters ] ], letters, text: rendered } } );
+	const joined = 'short bold lead a much longer paragraph in regular type';
+	const fig = [ { type: 'text', x: 68, y: 0, w: 400, h: 60, hash: hash( joined ), text: joined.slice( 0, TEXT_PREFIX ), style: { weight: '400', case: 'mixed', runs: '1' } } ];
+	const [ merged ] = mergeTextRuns( fig, [ para( 0, 'short bold lead', '700', 13, 'sentence', 'Short bold lead' ), para( 30, 'a much longer paragraph in regular type', '400', 33, 'sentence', 'A much longer paragraph in regular type' ) ] );
+	assert.deepEqual( [ merged.style.weight, merged.style.case ], [ '400', 'mixed' ], '33 of 46 letters are regular; two sentences read as mixed' );
+	// "Hello" (title) then "world here" (lower) read together as one sentence.
+	const two = 'hello world here';
+	const [ sentence ] = mergeTextRuns( [ { ...fig[ 0 ], hash: hash( two ), text: two } ], [ para( 0, 'hello', '400', 5, 'title', 'Hello' ), para( 30, 'world here', '400', 9, 'lower', 'world here' ) ] );
+	assert.equal( sentence.style.case, 'sentence' );
+} );
+
+test( 'text tokens compare as drawn: spacing within 0.3px, fonts by name, and older Figma files by their first character', () => {
+	assert.ok( sameToken( 'ls', '1.6', '1.8' ) && ! sameToken( 'ls', '1.6', '2' ) );
+	assert.ok( sameToken( 'font', 'Inter Variable', 'Inter' ) && sameToken( 'font', 'Barlow Condensed', 'barlow condensed' ) && ! sameToken( 'font', 'Barlow', 'Barlow Condensed' ) );
+	assert.ok( sameToken( 'case', 'upper', 'upper' ) && ! sameToken( 'case', 'upper', 'sentence' ) );
+	const text = ( style ) => ( { type: 'text', x: 68, y: 0, w: 300, h: 30, hash: 'h', text: 'built for every', style } );
+	const page = { ...text( { weight: '400', case: 'upper', ls: '0' } ), style0: { weight: '700' } };
+	const diffs = ( fig ) => styleDiffs( [ { f: text( fig ), p: page } ] ).map( ( d ) => [ d.property, d.figma, d.page ] );
+	assert.deepEqual( diffs( { weight: '400', case: 'sentence', ls: '0', runs: '1' } ), [ [ 'case', 'sentence', 'upper' ] ], 'from runs: the page\'s runs' );
+	assert.deepEqual( diffs( { weight: '700' } ), [], 'a file from before: the page\'s first character' );
+	// A live section's text styles likewise.
+	assert.deepEqual( missingTextStyles( [ text( { font: 'Barlow', size: '17', weight: '700' } ) ], [ { ...page, style: { font: 'Barlow', size: '17', weight: '400' }, style0: { font: 'Barlow', size: '17', weight: '700' } } ] ), [] );
+	assert.equal( missingTextStyles( [ text( { font: 'Barlow', size: '17', weight: '700', runs: '1' } ) ], [ { ...page, style: { font: 'Barlow', size: '17', weight: '400' }, style0: { font: 'Barlow', size: '17', weight: '700' } } ] ).length, 1 );
+} );
+
+test( 'a border only one side has counts only where the other draws no line along that edge', () => {
+	const row = { type: 'surface', x: 68, y: 200, w: 600, h: 60 };
+	const diffs = ( fs, ps, lines ) => styleDiffs( [ { f: { ...row, style: { stroke: fs } }, p: { ...row, style: { stroke: ps } } } ], () => false, { lines } ).map( ( d ) => [ d.figma, d.page ] );
+	const rule = ( y ) => ( { x: 68, y, w: 600, h: 1 } );
+	// Figma's divider along the top, nothing on the page: a missing border.
+	assert.deepEqual( diffs( '#e0e0e0/1 none none none', 'none', { figma: [ rule( 200 ) ], page: [] } ), [ [ '#e0e0e0/1 none none none', 'none' ] ] );
+	// The page draws it another way (a ::after rule, the element above's border): not missing.
+	assert.deepEqual( diffs( '#e0e0e0/1 none none none', 'none', { figma: [ rule( 200 ) ], page: [ rule( 199 ) ] } ), [] );
+	assert.deepEqual( diffs( '#e0e0e0/1 none none none', 'none', { figma: [], page: [ { x: 68, y: 199, w: 200, h: 1 } ] } ).length, 1, 'a line along a third of the edge isn\'t it' );
+	assert.deepEqual( diffs( '#e0e0e0/1 none none none', 'none', { figma: [], page: [ rule( 230 ) ] } ).length, 1, 'nor one across the middle' );
+	// And the other way: a page border Figma draws as a separate line isn't extra.
+	assert.deepEqual( diffs( 'none', 'none none #cccccc/1 none', { figma: [ rule( 259 ) ], page: [] } ), [] );
+	assert.deepEqual( diffs( 'none', 'none none #cccccc/1 none', { figma: [], page: [] } ).length, 1 );
+	// Without one side's lines it can't be told.
+	assert.deepEqual( diffs( '#e0e0e0/1 none none none', 'none', { figma: [], page: undefined } ), [] );
 } );
 
 test( 'an element cut off on either side is not compared by size or shape', () => {
@@ -1192,6 +1363,84 @@ test( 'an element cut off on either side is not compared by size or shape', () =
 	// Nor by style: a clipped fragment may pair with another element's fragment.
 	const panel = { type: 'surface', x: 1358, y: 272, w: 82, h: 196, clipped: true, style: { radius: '0' } };
 	assert.deepEqual( analyse( [ panel ], [ { type: 'surface', x: 1388, y: 0, w: 52, h: 555, clipped: true, style: { radius: '4' } } ] ).styles, [] );
+} );
+
+test( 'corners and sides that differ are named when a token is read out', () => {
+	assert.equal( tokenValue( 'radius', '8 8 0 0' ), 'top-left 8px, top-right 8px, bottom-right 0px, bottom-left 0px' );
+	assert.equal( tokenValue( 'stroke', 'none none #cccccc/1 none' ), 'top none, right none, bottom #cccccc/1, left none' );
+	assert.deepEqual( [ tokenValue( 'radius', '6' ), tokenValue( 'stroke', 'none' ), tokenValue( 'size', '16' ) ], [ '6px', 'none', '16px' ] );
+} );
+
+test( 'Figma corners and borders are read per corner and side, and an image takes its clipping frame\'s corners', () => {
+	const abs = ( x, y, width, height ) => ( { x, y, width, height } );
+	const grey = [ { type: 'SOLID', visible: true, color: { r: 0.8, g: 0.8, b: 0.8, a: 1 } } ];
+	const white = [ { type: 'SOLID', visible: true, color: { r: 1, g: 1, b: 1, a: 1 } } ];
+	const photo = [ { type: 'IMAGE', visible: true } ];
+	const frame = {
+		type: 'FRAME', name: 'Page', absoluteBoundingBox: abs( 0, 0, 1440, 600 ),
+		children: [ {
+			type: 'FRAME', name: 'Cards / Desktop', absoluteBoundingBox: abs( 0, 0, 1440, 600 ),
+			children: [
+				// REST: corners that differ come as rectangleCornerRadii, sides as individualStrokeWeights.
+				{ type: 'RECTANGLE', name: 'Tab', absoluteBoundingBox: abs( 68, 10, 200, 40 ), fills: white, strokes: grey, strokeWeight: 1, individualStrokeWeights: { top: 0, right: 0, bottom: 1, left: 0 }, cornerRadius: 8, rectangleCornerRadii: [ 8, 8, 0, 0 ] },
+				// One corner as large as it fits: radii shrink only when neighbours together overrun a side.
+				{ type: 'RECTANGLE', name: 'Corner', absoluteBoundingBox: abs( 1200, 10, 100, 100 ), fills: white, strokes: [], cornerRadius: 0, rectangleCornerRadii: [ 80, 0, 0, 0 ] },
+				// A pill: a radius past half the box draws as half the box.
+				{ type: 'RECTANGLE', name: 'Pill', absoluteBoundingBox: abs( 300, 10, 120, 40 ), fills: white, strokes: [], cornerRadius: 999 },
+				// The plugin API: figma.mixed (not a number) for a stroke that differs by side.
+				{ type: 'RECTANGLE', name: 'Rule', absoluteBoundingBox: abs( 500, 10, 200, 40 ), fills: white, strokes: grey, strokeWeight: Symbol( 'mixed' ), strokeTopWeight: 2, strokeRightWeight: 0, strokeBottomWeight: 0, strokeLeftWeight: 0, cornerRadius: 0 },
+				// A square photo in a rounded frame that clips it, at the same box, through a square one.
+				{ type: 'FRAME', name: 'Media', absoluteBoundingBox: abs( 68, 100, 628, 419 ), clipsContent: true, fills: [], strokes: [], cornerRadius: 6, children: [
+					{ type: 'FRAME', name: 'Inner', absoluteBoundingBox: abs( 68, 100, 628, 419 ), clipsContent: true, fills: [], strokes: [], cornerRadius: 0, children: [
+						{ type: 'RECTANGLE', name: 'Photo', absoluteBoundingBox: abs( 68, 100, 628, 419 ), fills: photo, strokes: [], cornerRadius: 0 },
+					] },
+				] },
+				// An avatar: a photo fill on an ellipse, and a photo masked by an ellipse.
+				{ type: 'ELLIPSE', name: 'Avatar', absoluteBoundingBox: abs( 68, 560, 48, 48 ), fills: photo, strokes: [] },
+				{ type: 'GROUP', name: 'Masked', absoluteBoundingBox: abs( 200, 560, 48, 48 ), children: [
+					{ type: 'ELLIPSE', name: 'Mask', isMask: true, absoluteBoundingBox: abs( 200, 560, 48, 48 ), fills: white, strokes: [] },
+					{ type: 'RECTANGLE', name: 'Photo', absoluteBoundingBox: abs( 200, 560, 48, 48 ), fills: photo, strokes: [], cornerRadius: 0 },
+				] },
+				// An oval photo has no one radius; a hidden mask clips nothing; a later mask replaces an earlier one.
+				{ type: 'ELLIPSE', name: 'Oval', absoluteBoundingBox: abs( 300, 560, 80, 48 ), fills: photo, strokes: [] },
+				{ type: 'GROUP', name: 'Hidden mask', absoluteBoundingBox: abs( 1000, 560, 48, 48 ), children: [
+					{ type: 'ELLIPSE', name: 'Mask', isMask: true, visible: false, absoluteBoundingBox: abs( 1000, 560, 48, 48 ), fills: white, strokes: [] },
+					{ type: 'RECTANGLE', name: 'Photo', absoluteBoundingBox: abs( 1000, 560, 48, 48 ), fills: photo, strokes: [], cornerRadius: 0 },
+				] },
+				{ type: 'GROUP', name: 'Two masks', absoluteBoundingBox: abs( 1100, 560, 48, 48 ), children: [
+					{ type: 'ELLIPSE', name: 'Round mask', isMask: true, absoluteBoundingBox: abs( 1100, 560, 48, 48 ), fills: white, strokes: [] },
+					{ type: 'RECTANGLE', name: 'Square mask', isMask: true, absoluteBoundingBox: abs( 1100, 560, 48, 48 ), fills: white, strokes: [], cornerRadius: 0 },
+					{ type: 'RECTANGLE', name: 'Photo', absoluteBoundingBox: abs( 1100, 560, 48, 48 ), fills: photo, strokes: [], cornerRadius: 0 },
+				] },
+				// A card that clips a photo along its top: the card's top corners round it.
+				{ type: 'FRAME', name: 'Card', absoluteBoundingBox: abs( 400, 560, 300, 30 ), clipsContent: true, fills: white, strokes: [], cornerRadius: 8, children: [
+					{ type: 'RECTANGLE', name: 'Photo', absoluteBoundingBox: abs( 400, 560, 300, 20 ), fills: photo, strokes: [], cornerRadius: 0 },
+				] },
+				// A photo rounded 4px in a frame rounded 20px: the frame's clip is what shows.
+				{ type: 'FRAME', name: 'Round', absoluteBoundingBox: abs( 800, 100, 300, 200 ), clipsContent: true, fills: [], strokes: [], cornerRadius: 20, children: [
+					{ type: 'RECTANGLE', name: 'Photo', absoluteBoundingBox: abs( 800, 100, 300, 200 ), fills: photo, strokes: [], cornerRadius: 4 },
+				] },
+			],
+		} ],
+	};
+	const boxes = extract( frame ).split( '\n' ).filter( ( l ) => l.startsWith( 'B|' ) );
+	const style = ( x ) => boxes.find( ( l ) => l.split( '|' )[ 3 ] === String( x ) ).split( '|' )[ 11 ];
+	assert.equal( style( 68 ).split( ';' ).find( ( t ) => t.startsWith( 'radius' ) ), 'radius=8 8 0 0' );
+	assert.match( style( 68 ), /stroke=none none #cccccc\/1 none/ );
+	assert.match( style( 300 ), /radius=20;stroke=none/ );
+	assert.match( style( 1200 ), /radius=80 0 0 0;/ );
+	assert.match( style( 500 ), /stroke=#cccccc\/2 none none none/ );
+	const images = boxes.filter( ( l ) => l.includes( '|image|' ) );
+	const at = ( x ) => images.find( ( l ) => l.split( '|' )[ 3 ] === String( x ) ).split( '|' )[ 11 ];
+	assert.equal( at( 300 ), 'stroke=none', 'an oval has no one radius' );
+	assert.equal( at( 1000 ), 'radius=0;stroke=none', 'a hidden mask clips nothing' );
+	assert.equal( at( 1100 ), 'radius=0;stroke=none', 'the later mask replaces the earlier one' );
+	const [ image, avatar, masked, , , , top, round ] = images;
+	assert.equal( avatar.split( '|' )[ 11 ], 'radius=24;stroke=none', 'an ellipse with a photo fill is a circle' );
+	assert.equal( masked.split( '|' )[ 11 ], 'radius=24;stroke=none', 'a photo masked by an ellipse is one too' );
+	assert.equal( top.split( '|' )[ 11 ], 'radius=8 8 0 0;stroke=none', 'a card rounds the corners it shares with the photo' );
+	assert.equal( image.split( '|' )[ 11 ], 'radius=6;stroke=none', 'the rounded frame\'s corners, through a square one' );
+	assert.equal( round.split( '|' )[ 11 ], 'radius=20;stroke=none', 'the roundest clip shows' );
 } );
 
 test( 'a frame that clips its content hides what lies outside it, in Figma as on the page', () => {

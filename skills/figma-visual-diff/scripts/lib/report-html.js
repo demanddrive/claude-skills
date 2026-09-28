@@ -12,7 +12,7 @@
  */
 
 import { alignedBox } from './align.js';
-import { TOKEN_LABELS, TOKEN_UNITS } from './defects.js';
+import { TOKEN_LABELS, tokenValue } from './defects.js';
 import { moduleQuestions, moduleState, REJECT, SIGN_OFF } from './jev.js';
 
 const esc = ( s ) => String( s ).replace( /[&<>"']/g, ( c ) => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ c ] ) );
@@ -61,7 +61,7 @@ function token( property, value ) {
 		return '<span class="muted">—</span>';
 	}
 	const swatches = String( value ).match( /#[0-9a-f]{6,8}/gi ) || [];
-	return `${ swatches.map( ( c ) => `<span class="swatch" style="background:${ c }"></span>` ).join( '' ) }${ esc( value ) }${ TOKEN_UNITS[ property ] ?? '' }`;
+	return `${ swatches.map( ( c ) => `<span class="swatch" style="background:${ c }"></span>` ).join( '' ) }${ esc( tokenValue( property, value ) ) }`;
 }
 
 /** Jev's "would a reviewer ask to fix this" level for one defect. */

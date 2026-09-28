@@ -41,8 +41,29 @@ is measured again at a taller viewport, and a space that changes with the viewpo
 ## Styles
 
 `style` defects compare design tokens between the same element on both sides: font, size, line
-height, weight and text colour (and text alignment, once text wraps); a surface's fill, corner
-radius and border. One defect covers
+height, weight, text colour, letter spacing, italic, underline or strike-through, and the case the
+letters are drawn in (upper, lower, title, sentence or mixed; Figma's text case and CSS
+`text-transform` applied, and none for under 3 letters), plus text alignment once text wraps.
+A text's style is the one on at least 60% of its letters, on both sides (a heading with one
+bold word is regular); where no value covers that much, that token isn't compared. Font names
+compare without case, spaces or a variable font's suffix. Texts from a Figma file extracted
+before this was read by runs keep their first character's style, compared with the page's
+first character's. Then a surface's fill, corner
+radius and border; an image's corner radius and border. Corners are compared one by one and
+borders side by side (a bottom-only divider isn't a full border). A border only one side has
+counts only where the other side draws no line along that edge at all, since it may draw the
+same line another way: both sides record every line they visibly draw (borders, outlines, box-shadow
+rings, gradients, `::before`/`::after` rules and thin elements on the page; strokes, LINE
+layers, thin fills and tight shadows in Figma), and a line within 3px of the edge along half
+its length draws it. A Figma file extracted before lines were recorded can't say which sides a
+border has, so such a side isn't judged until the frame is extracted again. A Figma frame drawn
+around an image is compared with the page image's border directly. An image's
+corners are its own, or those of a frame, mask or wrapper (`overflow: hidden`, `clip-path`)
+that clips it, for each corner they share (a rounded card rounds the top corners of the photo
+along its top). Elliptical corners (an oval, a percentage of a box that isn't square) and other
+clip shapes have no one radius and aren't compared, and radii are fitted to their box as CSS
+draws them (a 999px pill is half its height). An image from a Figma file extracted before
+images had corners has none to compare until the frame is extracted again. One defect covers
 every element with the same difference (`count`). Text is compared only where both sides say
 the same thing; in `live` sections, whose copy comes from the posts, each text style the design
 uses must appear somewhere on the page (`text-style`, with the closest page style).

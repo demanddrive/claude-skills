@@ -128,7 +128,144 @@ export function extractPageBoxes( detect, cfg ) {
 		const c = [ red, green, blue ].map( ( v ) => Math.round( v ).toString( 16 ).padStart( 2, '0' ) ).join( '' );
 		return a < 0.99 ? `#${ c }${ Math.round( a * 255 ).toString( 16 ).padStart( 2, '0' ) }` : `#${ c }`;
 	};
-	const styleOf = ( type, cs ) => {
+	// Four values (corners clockwise from top-left, sides clockwise from top) as one when they
+	// agree, as the Figma extractor records them.
+	const perSide = ( values ) => ( values.every( ( v ) => v === values[ 0 ] ) ? String( values[ 0 ] ) : values.join( ' ' ) );
+	// A percentage radius is of the box. Radii that together overrun a side shrink by the same
+	// factor, as CSS draws them, so a 999px or 50% pill reads as half its height.
+	// Null for elliptical corners (two radii, or a percentage of a box that isn't square): Figma
+	// has none, and no one number stands for them, so they aren't judged.
+	const corners = ( cs, r ) => {
+		const values = [ 'TopLeft', 'TopRight', 'BottomRight', 'BottomLeft' ].map( ( k ) => cs[ `border${ k }Radius` ] );
+		const square = Math.abs( r.width - r.height ) <= 1;
+		if ( values.some( ( v ) => /\s/.test( v.trim() ) || ( v.endsWith( '%' ) && parseFloat( v ) > 0 && ! square ) ) ) {
+			return null;
+		}
+		const [ tl, tr, br, bl ] = values.map( ( v ) => ( v.endsWith( '%' ) ? parseFloat( v ) / 100 * r.width : parseFloat( v ) || 0 ) );
+		const f = Math.min( 1, ...[ [ r.width, tl + tr ], [ r.width, bl + br ], [ r.height, tl + bl ], [ r.height, tr + br ] ].filter( ( [ , sum ] ) => sum > 0 ).map( ( [ side, sum ] ) => side / sum ) );
+		return [ tl, tr, br, bl ].map( ( v ) => Math.round( v * f ) );
+	};
+	const strokeOf = ( cs ) => perSide( [ 'Top', 'Right', 'Bottom', 'Left' ].map( ( k ) => {
+		const width = parseFloat( cs[ `border${ k }Width` ] ) || 0;
+		return width > 0 && alpha( cs[ `border${ k }Color` ] ) > 0.01 ? `${ hexOf( cs[ `border${ k }Color` ] ) }/${ Math.round( width * 10 ) / 10 }` : 'none';
+	} ) );
+	// Rounding by clip-path: `inset( … round R )` and `circle()`, as a radius on every corner.
+	// Only the whole box rounded evenly (`inset(0 round 8px)`) or a centred circle on a square box
+	// is a radius; any other clip-path is a shape no radius stands for, so it's null.
+	const clipRadius = ( c, r ) => {
+		if ( 'none' === c.clipPath ) {
+			return [ 0, 0, 0, 0 ];
+		}
+		const round = /^inset\(\s*0(?:px)?\s+round\s+([\d.]+)px\s*\)$/.exec( c.clipPath );
+		if ( round ) {
+			return new Array( 4 ).fill( Math.round( Math.min( parseFloat( round[ 1 ] ), Math.min( r.width, r.height ) / 2 ) ) );
+		}
+		const circle = /^circle\(\s*(?:50%|closest-side)?\s*(?:at\s+(?:50%|center)\s+(?:50%|center))?\s*\)$/.test( c.clipPath );
+		return circle && Math.abs( r.width - r.height ) <= 1 ? new Array( 4 ).fill( Math.round( r.width / 2 ) ) : null;
+	};
+	const roundest = ( a, b ) => ( a && b ? a.map( ( v, i ) => Math.max( v, b[ i ] ) ) : null );
+	const cornerPoints = ( q ) => [ [ q.left, q.top ], [ q.right, q.top ], [ q.right, q.bottom ], [ q.left, q.bottom ] ];
+	// A wrapper that clips an image rounds each corner of it that it shares (overflow hidden on a
+	// rounded card, the photo along its top): each corner is the roundest of them, as in Figma (see
+	// extractBoxes). A wrapper with a border is larger than the image, so it is a surface of its
+	// own, not part of this.
+	const imageStyle = ( el, cs, r ) => {
+		let radius = roundest( corners( cs, r ), clipRadius( cs, r ) );
+		const own = cornerPoints( r );
+		for ( let a = el.parentElement; a && a !== document.body; a = a.parentElement ) {
+			const ac = getComputedStyle( a );
+			if ( [ ac.overflowX, ac.overflowY ].every( ( o ) => 'visible' === o ) && 'none' === ac.clipPath ) {
+				continue;
+			}
+			const ar = a.getBoundingClientRect();
+			const theirs = cornerPoints( ar );
+			const radii = roundest( corners( ac, ar ), clipRadius( ac, ar ) );
+			const shares = theirs.map( ( [ x, y ], i ) => Math.abs( x - own[ i ][ 0 ] ) <= 1 && Math.abs( y - own[ i ][ 1 ] ) <= 1 );
+			if ( shares.some( Boolean ) ) {
+				radius = radius && radii ? radius.map( ( v, i ) => ( shares[ i ] ? Math.max( v, radii[ i ] ) : v ) ) : null;
+			}
+		}
+		return radius ? { radius: perSide( radius ), stroke: strokeOf( cs ) } : { stroke: strokeOf( cs ) };
+	};
+	// A text's style is its runs': each token is the value on at least TEXT_MAJORITY of its
+	// letters, else none, as Figma's is (see extractBoxes). A run is the text inside one element;
+	// decoration isn't inherited but drawn through, so a run is underlined if any element around
+	// it up to the section is.
+	const TEXT_MAJORITY = 0.6;
+	const caseOf = ( t ) => {
+		const letters = t.match( /\p{L}/gu ) || [];
+		if ( letters.length < 3 ) {
+			return undefined;
+		}
+		const upper = ( c ) => c === c.toUpperCase() && c !== c.toLowerCase();
+		const lower = ( c ) => c === c.toLowerCase() && c !== c.toUpperCase();
+		const words = t.split( /\s+/ ).map( ( w ) => w.match( /\p{L}/gu ) || [] ).filter( ( w ) => w.length );
+		if ( letters.every( upper ) ) {
+			return 'upper';
+		}
+		if ( letters.every( lower ) ) {
+			return 'lower';
+		}
+		if ( words.every( ( w ) => upper( w[ 0 ] ) && w.slice( 1 ).every( lower ) ) ) {
+			return 'title';
+		}
+		return upper( letters[ 0 ] ) && letters.slice( 1 ).every( lower ) ? 'sentence' : 'mixed';
+	};
+	const textRunStyle = ( el, cs, root ) => {
+		const runs = [];
+		const walker = document.createTreeWalker( el, NodeFilter.SHOW_TEXT );
+		for ( let t = walker.nextNode(); t; t = walker.nextNode() ) {
+			const letters = ( t.textContent.match( /\S/g ) || [] ).length;
+			const host = t.parentElement;
+			// display: contents draws no box of its own, so checkVisibility() says hidden; its text shows.
+			const hidden = host.checkVisibility && 'contents' !== getComputedStyle( host ).display && ! host.checkVisibility( { opacityProperty: true, visibilityProperty: true } );
+			if ( ! letters || hidden ) {
+				continue;
+			}
+			const c = getComputedStyle( host );
+			let deco = 'none';
+			for ( let a = host; a && a !== root.parentElement; a = a.parentElement ) {
+				const line = getComputedStyle( a ).textDecorationLine;
+				if ( /underline/.test( line ) || /line-through/.test( line ) ) {
+					deco = /underline/.test( line ) ? 'underline' : 'strike';
+					break;
+				}
+			}
+			runs.push( { letters, caps: 'normal' !== c.fontVariantCaps, style: {
+				font: c.fontFamily.split( ',' )[ 0 ].trim().replace( /^["']|["']$/g, '' ),
+				size: String( Math.round( parseFloat( c.fontSize ) * 10 ) / 10 ),
+				lh: 'normal' === c.lineHeight ? undefined : String( Math.round( parseFloat( c.lineHeight ) * 10 ) / 10 ),
+				weight: String( c.fontWeight ),
+				color: hexOf( c.color ),
+				ls: String( 'normal' === c.letterSpacing ? 0 : Math.round( parseFloat( c.letterSpacing ) * 10 ) / 10 ),
+				italic: 'normal' === c.fontStyle ? 'normal' : 'italic',
+				deco,
+			} } );
+		}
+		const total = runs.reduce( ( n, run ) => n + run.letters, 0 );
+		const style = {};
+		// Letters per value of each token: merged paragraphs are weighed together (see mergeTextRuns).
+		const tally = {};
+		for ( const key of [ 'font', 'size', 'lh', 'weight', 'color', 'ls', 'italic', 'deco' ] ) {
+			const weights = new Map();
+			for ( const run of runs ) {
+				weights.set( run.style[ key ], ( weights.get( run.style[ key ] ) || 0 ) + run.letters );
+			}
+			tally[ key ] = [ ...weights ].filter( ( [ v ] ) => undefined !== v );
+			const [ best, most ] = [ ...weights ].reduce( ( a, b ) => ( b[ 1 ] > a[ 1 ] ? b : a ), [ undefined, -1 ] );
+			if ( undefined !== best && total && most / total >= TEXT_MAJORITY ) {
+				style[ key ] = best;
+			}
+		}
+		style.align = styleOf( 'text', cs ).align;
+		// innerText is the text as drawn, text-transform applied; small caps it doesn't show.
+		const rendered = runs.some( ( run ) => run.caps ) ? undefined : caseOf( el.innerText || '' );
+		if ( rendered ) {
+			style.case = rendered;
+		}
+		return { style, tally: { ...tally, letters: total, text: runs.some( ( run ) => run.caps ) ? null : el.innerText || '' } };
+	};
+	const styleOf = ( type, cs, r ) => {
 		const style = {};
 		if ( 'text' === type ) {
 			style.font = cs.fontFamily.split( ',' )[ 0 ].trim().replace( /^["']|["']$/g, '' );
@@ -145,11 +282,11 @@ export function extractPageBoxes( detect, cfg ) {
 			if ( alpha( cs.backgroundColor ) > 0.01 ) {
 				style.fill = hexOf( cs.backgroundColor );
 			}
-			style.radius = String( Math.round( parseFloat( cs.borderTopLeftRadius ) || 0 ) );
-			const width = parseFloat( cs.borderTopWidth ) || 0;
-			if ( width > 0 && alpha( cs.borderTopColor ) > 0.01 ) {
-				style.stroke = `${ hexOf( cs.borderTopColor ) }/${ Math.round( width * 10 ) / 10 }`;
+			const radius = corners( cs, r );
+			if ( radius ) {
+				style.radius = perSide( radius );
 			}
+			style.stroke = strokeOf( cs );
 		}
 		return style;
 	};
@@ -188,7 +325,91 @@ export function extractPageBoxes( detect, cfg ) {
 	const sections = detect( cfg ).map( ( { el: sec, slug } ) => {
 		const sr = sec.getBoundingClientRect();
 		const boxes = [];
-		const push = ( type, r, text, cs, styleCs = cs, layout = null ) => {
+		// Every line the section draws, whatever draws it: a border only one side has may be drawn
+		// another way on the other (a divider element, a ::after rule, a box-shadow ring), so both
+		// sides record them all (see extractBoxes' L lines).
+		const lines = [];
+		const THIN = 3;
+		// Only the part a clipping ancestor leaves visible is drawn (walk sets lineClip).
+		let lineClip = null;
+		const lineAt = ( x, y, w, h ) => {
+			const q = clipTo( { left: x, top: y, width: Math.max( 1, w ), height: Math.max( 1, h ) }, lineClip );
+			if ( q ) {
+				lines.push( { x: Math.round( q.left - sr.left ), y: Math.round( q.top - sr.top ), w: Math.max( 1, Math.round( q.width ) ), h: Math.max( 1, Math.round( q.height ) ) } );
+			}
+		};
+		// The straight run of one side of a box (0 top, 1 right, 2 bottom, 3 left), `t` px thick and
+		// clear of its rounded corners: a circle's outline only touches its box's edges. None when the
+		// rounding leaves no straight part, or isn't known (elliptical corners).
+		const side = ( q, s, t, radii ) => {
+			if ( ! radii ) {
+				return;
+			}
+			const [ tl, tr, br, bl ] = radii;
+			const len = ( 0 === s || 2 === s ? q.width : q.height ) - [ tl + tr, tr + br, bl + br, tl + bl ][ s ];
+			if ( len >= 1 ) {
+				lineAt( ...[ [ q.left + tl, q.top, len, t ], [ q.left + q.width - t, q.top + tr, t, len ], [ q.left + bl, q.top + q.height - t, len, t ], [ q.left, q.top + tl, t, len ] ][ s ] );
+			}
+		};
+		const ring = ( q, radii ) => [ 0, 1, 2, 3 ].forEach( ( s ) => side( q, s, 1, radii ) );
+		// A shadow with (almost) no blur, offset or spread a few px, draws a rule on the sides it's
+		// offset to (inside the box for an inset one, so on the opposite edge), or round the box when
+		// it's spread. One offset further draws away from the edge, so it isn't that edge's line.
+		const shadowEdges = ( shadow, q, radii ) => 'none' !== shadow && shadow.split( /,(?![^(]*\))/ ).forEach( ( one ) => {
+			const [ x = 0, y = 0, blur = 0, spread = 0 ] = ( one.match( /-?[\d.]+px/g ) || [] ).map( parseFloat );
+			if ( alpha( one ) <= 0.01 || Math.abs( blur ) > 2 || Math.max( Math.abs( x ), Math.abs( y ) ) > THIN || Math.abs( spread ) > THIN ) {
+				return;
+			}
+			const inset = /\binset\b/.test( one );
+			const sides = spread > 0 ? [ 0, 1, 2, 3 ] : [ y < 0 && 0, x > 0 && 1, y > 0 && 2, x < 0 && 3 ].filter( ( v ) => false !== v );
+			sides.map( ( s ) => ( inset ? ( s + 2 ) % 4 : s ) ).forEach( ( s ) => side( q, s, 1, radii ) );
+		} );
+		const drawn = ( c, q, tag = '' ) => {
+			const width = ( k ) => ( parseFloat( c[ `border${ k }Width` ] ) > 0 && alpha( c[ `border${ k }Color` ] ) > 0.01 ? parseFloat( c[ `border${ k }Width` ] ) : 0 );
+			const [ top, right, bottom, left ] = [ 'Top', 'Right', 'Bottom', 'Left' ].map( width );
+			const radii = corners( c, q );
+			[ top, right, bottom, left ].forEach( ( w, s ) => w > 0 && side( q, s, w, radii ) );
+			shadowEdges( c.boxShadow, q, radii );
+			// An outline draws round the box, outside it by its offset: within a few px, it's the edge's.
+			if ( 'none' !== c.outlineStyle && parseFloat( c.outlineWidth ) > 0 && alpha( c.outlineColor ) > 0.01 && Math.abs( parseFloat( c.outlineOffset ) || 0 ) <= THIN ) {
+				ring( q, radii );
+			}
+			// A no-repeat gradient a few px thick is a rule painted as a background: where it sits.
+			if ( /gradient\(/.test( c.backgroundImage ) && ! /,/.test( c.backgroundImage.replace( /\([^()]*\)/g, '' ).replace( /\([^()]*\)/g, '' ) ) && 'no-repeat' === c.backgroundRepeat ) {
+				const size = ( v, box ) => ( v.endsWith( '%' ) ? parseFloat( v ) / 100 * box : parseFloat( v ) );
+				const [ sw = '100%', sh = sw ] = c.backgroundSize.split( /\s+/ );
+				const [ w, h ] = [ size( sw, q.width ), size( sh, q.height ) ];
+				if ( w > 0 && h > 0 && Math.min( w, h ) <= THIN ) {
+					const [ px, py = '50%' ] = c.backgroundPosition.split( /\s+(?![^(]*\))/ );
+					lineAt( q.left + bgOffset( px, q.width, w ), q.top + bgOffset( py, q.height, h ), w, h );
+				}
+			}
+			// A thin box that paints anything is a rule.
+			const paints = alpha( c.backgroundColor ) > 0.01 || 'none' !== c.backgroundImage || /^(IMG|SVG|HR|CANVAS)$/i.test( tag );
+			if ( paints && Math.min( q.width, q.height ) <= THIN && Math.max( q.width, q.height ) >= 8 ) {
+				lineAt( q.left, q.top, q.width, q.height );
+			}
+		};
+		const drawnLines = ( el, cs, r ) => {
+			drawn( cs, r, el.tagName );
+			// An element that clips its overflow clips its own ::before and ::after too.
+			if ( [ cs.overflowX, cs.overflowY ].some( ( o ) => 'visible' !== o ) ) {
+				const own = clipTo( r, lineClip );
+				lineClip = own ? { left: own.left, top: own.top, right: own.left + own.width, bottom: own.top + own.height } : { left: 0, top: 0, right: 0, bottom: 0 };
+			}
+			// A ::before or ::after that paints (a rule, a divider): measured where the layout puts it.
+			for ( const which of [ '::before', '::after' ] ) {
+				const ps = getComputedStyle( el, which );
+				if ( 'none' === ps.content || 'normal' === ps.content || 'none' === ps.display || 'visible' !== ps.visibility || Number( ps.opacity ) < 0.01 ) {
+					continue;
+				}
+				const paints = alpha( ps.backgroundColor ) > 0.01 || 'none' !== ps.backgroundImage || 'none' !== ps.boxShadow || [ 'Top', 'Right', 'Bottom', 'Left' ].some( ( k ) => parseFloat( ps[ `border${ k }Width` ] ) > 0 );
+				if ( paints ) {
+					drawn( ps, pseudoRect( el, which, ps ) );
+				}
+			}
+		};
+		const push = ( type, r, text, cs, styleCs = cs, layout = null, style = null ) => {
 			if ( ! r ) {
 				return;
 			}
@@ -208,8 +429,18 @@ export function extractPageBoxes( detect, cfg ) {
 				b.mt = Math.round( parseFloat( cs.marginTop ) || 0 );
 				b.mb = Math.round( parseFloat( cs.marginBottom ) || 0 );
 			}
-			if ( cs ) {
-				b.style = styleOf( type, styleCs );
+			if ( style ) {
+				b.style = style;
+			} else if ( cs ) {
+				b.style = styleOf( type, styleCs, r );
+			}
+			// A text's style by its runs; the first character's stays, for Figma files from before
+			// runs were read (see styleDiffs).
+			if ( 'text' === type && owner ) {
+				const { style: runStyle, tally } = textRunStyle( owner, cs, sec );
+				b.style0 = b.style;
+				b.style = runStyle;
+				b.tally = tally;
 			}
 			// A text's layout box, as Figma records its text layer's: where its lines may run,
 			// the element's content box (a list item's padding holds its bullet, not its text).
@@ -305,9 +536,11 @@ export function extractPageBoxes( detect, cfg ) {
 				return;
 			}
 			const cut = ( q ) => clipTo( q, clip );
+			lineClip = clip;
+			drawnLines( el, cs, r );
 			const tag = el.tagName.toUpperCase();
 			if ( /^(IMG|VIDEO|IFRAME|CANVAS)$/.test( tag ) ) {
-				push( 'image', cut( r ) );
+				push( 'image', cut( r ), undefined, undefined, undefined, null, imageStyle( el, cs, r ) );
 				return;
 			}
 			if ( 'SVG' === tag ) {
@@ -320,7 +553,8 @@ export function extractPageBoxes( detect, cfg ) {
 			}
 			if ( /url\(/.test( cs.backgroundImage ) ) {
 				const bg = background( cs, r );
-				push( bg.type, cut( bg.rect ) );
+				// A background filling its box has that box's corners and border.
+				push( bg.type, cut( bg.rect ), undefined, undefined, undefined, null, 'image' === bg.type && bg.rect === r ? imageStyle( el, cs, r ) : null );
 			}
 			const border = [ 'Top', 'Right', 'Bottom', 'Left' ].some( ( s ) => parseFloat( cs[ `border${ s }Width` ] ) > 0 && alpha( cs[ `border${ s }Color` ] ) > 0.01 );
 			if ( ! isRoot && r.width < vw - 1 && ( alpha( cs.backgroundColor ) > 0.01 || border || 'none' !== cs.boxShadow ) ) {
@@ -353,7 +587,7 @@ export function extractPageBoxes( detect, cfg ) {
 			children( clips ? { left: inner.left, top: inner.top, right: inner.left + inner.width, bottom: inner.top + inner.height } : clip );
 		};
 		walk( sec, true );
-		return { slug, y: sr.top + window.scrollY, height: sr.height, boxes };
+		return { slug, y: sr.top + window.scrollY, height: sr.height, boxes, lines };
 	} );
 	hidePseudo.remove();
 	return sections;

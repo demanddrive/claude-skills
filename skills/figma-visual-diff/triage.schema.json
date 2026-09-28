@@ -281,8 +281,8 @@
 					"description": "A design token differs between paired elements: font, font size, line height, weight or text colour; a surface's fill, corner radius or border. One defect per difference; count says how many elements share it.",
 					"properties": {
 						"kind": { "const": "visual" }, "issue": { "const": "style" },
-						"property": { "enum": [ "font", "size", "lh", "weight", "color", "fill", "radius", "stroke", "align", "text-style" ], "description": "text-style: a text style the design uses that no page text has (live sections, where copy differs); figma and page are font/size/line-height/weight/colour, page the closest style used." },
-						"figma": { "type": "string" }, "page": { "type": "string", "description": "Sizes in px, colours as #rrggbb(aa), borders as <colour>/<width>; empty when the page has no text to compare." },
+						"property": { "enum": [ "font", "size", "lh", "weight", "color", "fill", "radius", "stroke", "align", "ls", "italic", "deco", "case", "text-style" ], "description": "ls: letter spacing (px); italic: italic or normal; deco: underline, strike or none; case: the letters' case as drawn (upper, lower, title, sentence or mixed). text-style: a text style the design uses that no page text has (live sections, where copy differs); figma and page are font/size/line-height/weight/colour, page the closest style used." },
+						"figma": { "type": "string" }, "page": { "type": "string", "description": "Sizes in px, colours as #rrggbb(aa), borders as <colour>/<width> or none. Radii and borders that differ by corner or side are four values separated by spaces (corners clockwise from top-left, sides from top). Empty when the page has no text to compare." },
 						"count": { "type": "integer", "minimum": 1 },
 						"element": { "$ref": "#/$defs/element" }
 					},

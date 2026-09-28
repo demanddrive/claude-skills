@@ -119,6 +119,68 @@ function iou( a, b, t ) {
 	return inter / ( ( ax2 - ax1 ) * ( ay2 - ay1 ) + ( bx2 - bx1 ) * ( by2 - by1 ) - inter );
 }
 
+/** Share of a text's letters a token's value needs to stand for the text (as the extractors use). */
+const TEXT_MAJORITY = 0.6;
+
+/** The letters' case, as both extractors read it (see their caseOf): none under 3 letters. */
+function caseOf( t ) {
+	const letters = t.match( /\p{L}/gu ) || [];
+	if ( letters.length < 3 ) {
+		return undefined;
+	}
+	const upper = ( c ) => c === c.toUpperCase() && c !== c.toLowerCase();
+	const lower = ( c ) => c === c.toLowerCase() && c !== c.toUpperCase();
+	const words = t.split( /\s+/ ).map( ( w ) => w.match( /\p{L}/gu ) || [] ).filter( ( w ) => w.length );
+	if ( letters.every( upper ) ) {
+		return 'upper';
+	}
+	if ( letters.every( lower ) ) {
+		return 'lower';
+	}
+	if ( words.every( ( w ) => upper( w[ 0 ] ) && w.slice( 1 ).every( lower ) ) ) {
+		return 'title';
+	}
+	return upper( letters[ 0 ] ) && letters.slice( 1 ).every( lower ) ? 'sentence' : 'mixed';
+}
+
+/**
+ * The style of page paragraphs merged into one text: each token by all their letters, as the
+ * page extractor weighs one paragraph's runs, and the case of the whole.
+ *
+ * @param {Array} run Page text boxes, in order, with tally (letters per token value) and style.
+ * @return {Object} Style.
+ */
+function mergedStyle( run ) {
+	if ( ! run.every( ( b ) => b.tally ) ) {
+		return run[ 0 ].style;
+	}
+	const letters = run.reduce( ( n, b ) => n + b.tally.letters, 0 );
+	const style = {};
+	for ( const key of Object.keys( run[ 0 ].tally ).filter( ( k ) => 'letters' !== k && 'text' !== k ) ) {
+		const weights = new Map();
+		for ( const b of run ) {
+			for ( const [ v, n ] of b.tally[ key ] || [] ) {
+				weights.set( v, ( weights.get( v ) || 0 ) + n );
+			}
+		}
+		const [ best, most ] = [ ...weights ].reduce( ( a, b ) => ( b[ 1 ] > a[ 1 ] ? b : a ), [ undefined, -1 ] );
+		if ( undefined !== best && letters && most / letters >= TEXT_MAJORITY ) {
+			style[ key ] = best;
+		}
+	}
+	if ( run[ 0 ].style?.align ) {
+		style.align = run[ 0 ].style.align;
+	}
+	// The case of the paragraphs' text together, as the Figma layer holding them reads.
+	if ( run.every( ( b ) => 'string' === typeof b.tally.text ) ) {
+		const joined = caseOf( run.map( ( b ) => b.tally.text ).join( ' ' ) );
+		if ( joined ) {
+			style.case = joined;
+		}
+	}
+	return style;
+}
+
 /**
  * One Figma text layer can hold several paragraphs the page renders as separate
  * elements. Merge a run of consecutive page text boxes whose joined text hashes to
@@ -151,7 +213,7 @@ export function mergeTextRuns( fig, pg ) {
 					const y = Math.min( ...run.map( ( b ) => b.y ) );
 					const w = Math.max( ...run.map( ( b ) => b.x + b.w ) ) - x;
 					const h = Math.max( ...run.map( ( b ) => b.y + b.h ) ) - y;
-					const merged = { type: 'text', x, y, w, h, full: joined, hash: f.hash, text: joined.slice( 0, TEXT_PREFIX ), mt: run[ 0 ].mt, mb: run[ run.length - 1 ].mb, style: run[ 0 ].style };
+					const merged = { type: 'text', x, y, w, h, full: joined, hash: f.hash, text: joined.slice( 0, TEXT_PREFIX ), mt: run[ 0 ].mt, mb: run[ run.length - 1 ].mb, style: mergedStyle( run ), style0: run[ 0 ].style0 };
 					// The paragraphs' layout boxes together.
 					if ( run.every( ( b ) => b.lw ) ) {
 						merged.lx = Math.min( ...run.map( ( b ) => b.lx ) );
@@ -440,13 +502,96 @@ export function element( b ) {
 export const describe = ( b ) => `${ b.type } ${ b.w }×${ b.h } at ${ b.x },${ b.y }${ b.text ? ` "${ b.text }"` : '' }`;
 
 /** How far a design token may differ before it counts: px for sizes, 0-255 per colour channel. */
-const TOKEN_TOLERANCE = { size: 0.5, lh: 1, weight: 0, radius: 1, strokeWidth: 0.5, channel: 2 };
+const TOKEN_TOLERANCE = { size: 0.5, lh: 1, weight: 0, radius: 1, strokeWidth: 0.5, channel: 2, ls: 0.3 };
+
+/** A font family as both sides name it: case, spaces and a variable font's suffix aside. */
+const fontName = ( v ) => v.trim().toLowerCase().replace( /[\s_-]+(variable|vf)$/, '' ).replace( /[\s_-]+/g, '' );
 
 const channels = ( hex ) => ( hex.match( /[0-9a-f]{2}/gi ) || [] ).map( ( c ) => parseInt( c, 16 ) );
 const sameColor = ( a, b ) => {
 	const [ ca, cb ] = [ channels( a ), channels( b ) ];
 	// A missing alpha is opaque.
 	return [ 0, 1, 2, 3 ].every( ( i ) => Math.abs( ( ca[ i ] ?? 255 ) - ( cb[ i ] ?? 255 ) ) <= TOKEN_TOLERANCE.channel );
+};
+
+/** Four values (corners clockwise from top-left, or sides from top) from one or four. */
+const four = ( v ) => {
+	const parts = String( v ).trim().split( /\s+/ );
+	return 1 === parts.length ? [ parts[ 0 ], parts[ 0 ], parts[ 0 ], parts[ 0 ] ] : parts;
+};
+
+/** Four values back as one when they agree, as the extractors write them. */
+const collapse = ( values ) => ( values.every( ( v ) => v === values[ 0 ] ) ? String( values[ 0 ] ) : values.join( ' ' ) );
+
+/**
+ * Corner radii as they draw on a box: radii that together overrun a side shrink by the same
+ * factor, as CSS draws them. Both extractors do this, but a Figma file extracted before they did
+ * records a pill as 999, so it's done again here with each side's own box.
+ *
+ * @param {string} radius Radius token.
+ * @param {Object} b      The box it's on.
+ * @return {string}
+ */
+export function fitRadius( radius, b ) {
+	const [ tl, tr, br, bl ] = four( radius ).map( Number );
+	const f = Math.min( 1, ...[ [ b.w, tl + tr ], [ b.w, bl + br ], [ b.h, tl + bl ], [ b.h, tr + br ] ].filter( ( [ , sum ] ) => sum > 0 ).map( ( [ side, sum ] ) => side / sum ) );
+	return collapse( [ tl, tr, br, bl ].map( ( v ) => Math.round( v * f ) ) );
+}
+
+/** Whether a border token draws a line on any side. */
+const bordered = ( v ) => four( v ).some( ( side ) => 'none' !== side && ! /^#[0-9a-f]{6}00\//i.test( side ) );
+
+/** How far (px) a line may sit from an edge and still draw it; lines cover at least half of it. */
+const EDGE_REACH = 3;
+
+/**
+ * Whether some line draws a box's edge: runs along it, within EDGE_REACH, over half its length.
+ *
+ * @param {Array}  lines Lines, section-relative {x, y, w, h}.
+ * @param {Object} b     Box.
+ * @param {number} side  0 top, 1 right, 2 bottom, 3 left.
+ * @return {boolean}
+ */
+export function drawsEdge( lines, b, side ) {
+	const horizontal = 0 === side || 2 === side;
+	const at = [ b.y, b.x + b.w, b.y + b.h, b.x ][ side ];
+	return lines.some( ( l ) => {
+		const [ from, to ] = horizontal ? [ l.y, l.y + l.h ] : [ l.x, l.x + l.w ];
+		const [ start, end, len ] = horizontal ? [ l.x, l.x + l.w, b.w ] : [ l.y, l.y + l.h, b.h ];
+		const [ edgeStart, edgeEnd ] = horizontal ? [ b.x, b.x + b.w ] : [ b.y, b.y + b.h ];
+		return from <= at + EDGE_REACH && to >= at - EDGE_REACH && Math.min( end, edgeEnd ) - Math.max( start, edgeStart ) >= len / 2;
+	} );
+}
+
+/**
+ * Whether two borders draw the same, side by side (see styleDiffs): both border a side alike,
+ * neither does, or one does and the other draws that edge some other way (or can't be told).
+ */
+const sameBorders = ( figma, page, f, p, lines ) => {
+	const [ sf, sp ] = [ four( figma ), four( page ) ];
+	return sf.every( ( v, i ) => {
+		const [ inFigma, onPage ] = [ bordered( v ), bordered( sp[ i ] ) ];
+		if ( inFigma && onPage ) {
+			return sameStroke( v, sp[ i ] );
+		}
+		if ( inFigma === onPage ) {
+			return true;
+		}
+		if ( ! lines.figma || ! lines.page ) {
+			return true;
+		}
+		return inFigma ? drawsEdge( lines.page, p, i ) : drawsEdge( lines.figma, f, i );
+	} );
+};
+
+/** One side's border, `#rrggbb(aa)/<width>` or none; a fully transparent one is none. */
+const sameStroke = ( a, b ) => {
+	[ a, b ] = [ a, b ].map( ( v ) => ( /^#[0-9a-f]{6}00\//i.test( v ) ? 'none' : v ) );
+	if ( 'none' === a || 'none' === b ) {
+		return a === b;
+	}
+	const [ [ colorA, widthA ], [ colorB, widthB ] ] = [ a.split( '/' ), b.split( '/' ) ];
+	return sameColor( colorA, colorB ) && Math.abs( Number( widthA ) - Number( widthB ) ) <= TOKEN_TOLERANCE.strokeWidth;
 };
 
 /**
@@ -458,15 +603,23 @@ const sameColor = ( a, b ) => {
  * @return {boolean}
  */
 export function sameToken( key, a, b ) {
-	if ( 'font' === key || 'align' === key ) {
+	if ( 'font' === key ) {
+		return fontName( a ) === fontName( b );
+	}
+	if ( 'align' === key || 'italic' === key || 'deco' === key || 'case' === key ) {
 		return a.trim().toLowerCase() === b.trim().toLowerCase();
 	}
 	if ( 'color' === key || 'fill' === key ) {
 		return sameColor( a, b );
 	}
+	// Borders side by side and radii corner by corner: a bottom-only divider isn't a full border.
 	if ( 'stroke' === key ) {
-		const [ [ colorA, widthA ], [ colorB, widthB ] ] = [ a.split( '/' ), b.split( '/' ) ];
-		return sameColor( colorA, colorB ) && Math.abs( Number( widthA ) - Number( widthB ) ) <= TOKEN_TOLERANCE.strokeWidth;
+		const [ sa, sb ] = [ four( a ), four( b ) ];
+		return sa.every( ( v, i ) => sameStroke( v, sb[ i ] ) );
+	}
+	if ( 'radius' === key ) {
+		const [ ca, cb ] = [ four( a ), four( b ) ];
+		return ca.every( ( v, i ) => Math.abs( Number( v ) - Number( cb[ i ] ) ) <= TOKEN_TOLERANCE.radius );
 	}
 	return Math.abs( Number( a ) - Number( b ) ) <= ( TOKEN_TOLERANCE[ key ] ?? 0 );
 }
@@ -481,22 +634,46 @@ const comparable = ( key, a, b ) => undefined !== a && undefined !== b &&
 	! ( ( 'color' === key || 'fill' === key ) && translucent( a ) !== translucent( b ) );
 
 /**
+ * The page style a Figma box compares with: a Figma text style from a file extracted before
+ * styles were read from runs is its first character's, so the page's first character's.
+ *
+ * @param {Object} f Figma box.
+ * @param {Object} p Page box.
+ * @return {Object|undefined}
+ */
+const pageStyleFor = ( f, p ) => ( 'text' === f.type && ! f.style?.runs ? p.style0 ?? p.style : p.style );
+
+/**
  * Design tokens that differ between paired boxes. Text is compared only where both say the
  * same thing: a pair with different copy may well be two different elements (a label paired
  * with a heading), whose tokens say nothing about each other.
  *
- * @param {Array}    pairs      matchBoxes() pairs.
- * @param {Function} hiddenFill Whether a pair's fill is hidden (under an image on both sides).
+ * Borders are compared side by side. A side only one of them borders counts only where the
+ * other draws no line along that edge at all: it may draw it as a divider element, a `::after`
+ * rule or a box-shadow ring, none of which is a border (`lines`, what each side draws). Without
+ * both sides' lines (a Figma file extracted before they were recorded, whose per-side borders
+ * aren't reliable either) such a side isn't judged. `presence` compares them as borders only,
+ * for an image's frame (see analyseSection).
+ *
+ * @param {Array}    pairs            matchBoxes() pairs.
+ * @param {Function} hiddenFill       Whether a pair's fill is hidden (under an image on both sides).
+ * @param {Object}   options          Comparison options.
+ * @param {boolean}  options.presence Report a border one side lacks.
+ * @param {Object}   options.lines    Lines each side draws: { figma, page }, section-relative.
  * @return {Array<{property: string, figma: string, page: string, element: Object}>}
  */
-export function styleDiffs( pairs, hiddenFill = () => false ) {
+export function styleDiffs( pairs, hiddenFill = () => false, { presence = false, lines = {} } = {} ) {
 	const diffs = [];
 	for ( const m of pairs ) {
 		const { f, p } = m;
 		if ( 'text' === f.type && f.hash !== p.hash ) {
 			continue;
 		}
+		const pageStyle = pageStyleFor( f, p );
 		for ( const [ key, value ] of Object.entries( f.style || {} ) ) {
+			if ( 'runs' === key ) {
+				continue;
+			}
 			if ( 'fill' === key && hiddenFill( m ) ) {
 				continue;
 			}
@@ -504,9 +681,15 @@ export function styleDiffs( pairs, hiddenFill = () => false ) {
 			if ( 'align' === key && ! ( wrapped( f ) && wrapped( p ) ) ) {
 				continue;
 			}
-			const other = p.style?.[ key ];
-			if ( comparable( key, value, other ) && ! sameToken( key, value, other ) ) {
-				diffs.push( { property: key, figma: value, page: other, element: element( f ) } );
+			let [ figma, page ] = [ value, pageStyle?.[ key ] ];
+			if ( 'stroke' === key && ! presence && ( undefined === page || sameBorders( figma, page, f, p, lines ) ) ) {
+				continue;
+			}
+			if ( 'radius' === key && undefined !== page ) {
+				[ figma, page ] = [ fitRadius( figma, f ), fitRadius( page, p ) ];
+			}
+			if ( comparable( key, figma, page ) && ! sameToken( key, figma, page ) ) {
+				diffs.push( { property: key, figma, page, element: element( f ) } );
 			}
 		}
 	}
@@ -533,12 +716,13 @@ export function missingTextStyles( figmaBoxes, pageBoxes ) {
 	const seen = new Set();
 	const missing = [];
 	for ( const f of texts( figmaBoxes ) ) {
-		if ( seen.has( signature( f.style ) ) || page.some( ( p ) => same( f.style, p.style ) ) ) {
+		const styleOf = ( p ) => pageStyleFor( f, p );
+		if ( seen.has( signature( f.style ) ) || page.some( ( p ) => same( f.style, styleOf( p ) ) ) ) {
 			continue;
 		}
 		seen.add( signature( f.style ) );
-		const closest = page.reduce( ( best, p ) => ( ! best || differing( f.style, p.style ) < differing( f.style, best.style ) ? p : best ), null );
-		missing.push( { property: 'text-style', figma: signature( f.style ), page: closest ? signature( closest.style ) : '', element: element( f ) } );
+		const closest = page.reduce( ( best, p ) => ( ! best || differing( f.style, styleOf( p ) ) < differing( f.style, styleOf( best ) ) ? p : best ), null );
+		missing.push( { property: 'text-style', figma: signature( f.style ), page: closest ? signature( styleOf( closest ) ) : '', element: element( f ) } );
 	}
 	return missing;
 }
@@ -782,10 +966,29 @@ export function analyseSection( figma, page, { tolerance: t, live, width } ) {
 	// not an element of its own: where the page has no frame there, it's the frame's style that
 	// differs. Its fill is under the image either way.
 	const covered = ( b, boxes ) => boxes.some( ( o ) => 'image' === o.type && o !== b && inside( b, o ) && inside( o, b ) );
-	const frames = match.missing.filter( ( b ) => 'surface' === b.type && match.pairs.some( ( m ) => 'image' === m.f.type && inside( b, m.f ) && inside( m.f, b ) ) );
-	const frameStyles = frames.flatMap( ( b ) => ( b.style?.stroke && ! /^#[0-9a-f]{6}00\//i.test( b.style.stroke ) ? [ { property: 'stroke', figma: b.style.stroke, page: 'none', element: element( b ) } ] : [] ) );
+	const framing = ( b ) => match.pairs.find( ( m ) => 'image' === m.f.type && inside( b, m.f ) && inside( m.f, b ) );
+	const frames = match.missing.filter( ( b ) => 'surface' === b.type && framing( b ) );
+	// The frame's border is drawn over the photo, so it is the image's border, compared with the
+	// page image's (a page wrapper with a border is larger than the photo, so it pairs with the
+	// frame as a surface instead, and the frame isn't here). Where the frame has none (a fill
+	// behind the photo), the image's own stands. Its corners are the image's as extracted (its
+	// own, or those of the frames that clip it): a frame that doesn't clip doesn't round the photo,
+	// and an image from a file extracted before images had corners has none to compare.
+	const framed = new Set( frames.map( ( b ) => framing( b ) ) );
+	const frameStyles = frames.flatMap( ( b ) => {
+		const m = framing( b );
+		// A cut-off photo shows only part of its corners and border, as a cut-off surface does.
+		if ( cutOff( b ) || cutOff( m.f ) || cutOff( m.p ) ) {
+			return [];
+		}
+		const stroke = undefined !== b.style?.stroke && bordered( b.style.stroke ) ? b.style.stroke : m.f.style?.stroke;
+		const style = Object.fromEntries( Object.entries( { radius: m.f.style?.radius, stroke } ).filter( ( [ , v ] ) => undefined !== v ) );
+		// A page image without a border token (a background image drawn smaller than its box) has none.
+		const p = { ...m.p, style: { ...m.p.style, stroke: m.p.style?.stroke ?? 'none' } };
+		return styleDiffs( [ { f: { ...b, style }, p } ], () => false, { presence: true } );
+	} );
 	// An image's frame stands for the image it frames.
-	const asElement = ( b ) => ( frames.includes( b ) ? match.pairs.find( ( m ) => 'image' === m.f.type && inside( b, m.f ) && inside( m.f, b ) ).f : b );
+	const asElement = ( b ) => ( frames.includes( b ) ? framing( b ).f : b );
 	// At a section's edge a live section's text counts too: the posts change its words, not
 	// where it starts.
 	const spacing = spacingDiffs( {
@@ -798,6 +1001,7 @@ export function analyseSection( figma, page, { tolerance: t, live, width } ) {
 		},
 	} );
 	const missing = match.missing.filter( ( b ) => inFigmaTemplate( b ) && ! frames.includes( b ) );
+	const drawnLines = { figma: figma.lines, page: page.lines };
 	// A fill under an image that covers it, on both sides, can't be seen.
 	const hiddenFill = ( m ) => 'surface' === m.f.type && covered( m.f, fig ) && covered( m.p, pageBoxes );
 	return {
@@ -819,8 +1023,8 @@ export function analyseSection( figma, page, { tolerance: t, live, width } ) {
 		styles: [
 			...frameStyles,
 			...( live
-				? [ ...styleDiffs( whole.filter( ( m ) => 'text' !== m.f.type ), hiddenFill ), ...missingTextStyles( fig, page.boxes ) ]
-				: styleDiffs( whole, hiddenFill ) ),
+				? [ ...styleDiffs( whole.filter( ( m ) => 'text' !== m.f.type && ! framed.has( m ) ), hiddenFill, { lines: drawnLines } ), ...missingTextStyles( fig, page.boxes ) ]
+				: styleDiffs( whole.filter( ( m ) => ! framed.has( m ) ), hiddenFill, { lines: drawnLines } ) ),
 		],
 	};
 }

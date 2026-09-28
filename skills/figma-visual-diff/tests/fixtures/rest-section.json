@@ -29,6 +29,13 @@
    }
   }
  ],
+ "strokeWeight": 2,
+ "individualStrokeWeights": {
+  "top": 0,
+  "right": 0,
+  "bottom": 2,
+  "left": 0
+ },
  "layoutMode": "VERTICAL",
  "paddingLeft": 68,
  "paddingRight": 68,

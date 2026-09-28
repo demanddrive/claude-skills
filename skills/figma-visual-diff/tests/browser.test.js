@@ -6,7 +6,7 @@ import { test } from 'node:test';
 
 import { DEFAULT_CONFIG } from '../scripts/config.js';
 import { chromiumPath } from '../scripts/lib/browser.js';
-import { paddingOf } from '../scripts/lib/boxes.js';
+import { drawsEdge, paddingOf } from '../scripts/lib/boxes.js';
 import { evaluateWithSections, extractPageBoxes, measureTwice } from '../scripts/lib/page.js';
 
 let chromium;
@@ -151,18 +151,136 @@ test( 'text and surfaces record their design tokens from computed CSS', { skip: 
 		<main><section class="block-cards"><div class="pill"></div><h3>Quality</h3><p class="meta"><b>2026</b> | Dallas, TX</p><p class="centred">Centred</p><ul style="margin:0;padding:0"><li class="bulleted">Bulleted item</li></ul></section></main>` );
 		const [ section ] = await evaluateWithSections( page, extractPageBoxes, DEFAULT_CONFIG );
 		const text = section.boxes.find( ( b ) => 'text' === b.type );
-		assert.deepEqual( text.style, { font: 'Barlow', size: '28', lh: '36.4', weight: '700', color: '#3d3d3d', align: 'left' } );
+		assert.deepEqual( text.style, { font: 'Barlow', size: '28', lh: '36.4', weight: '700', color: '#3d3d3d', ls: '0', italic: 'normal', deco: 'none', align: 'left', case: 'title' } );
+		assert.deepEqual( text.style0, { font: 'Barlow', size: '28', lh: '36.4', weight: '700', color: '#3d3d3d', align: 'left' }, 'the first character\'s, for older Figma files' );
 		assert.equal( section.boxes.find( ( b ) => 'Centred' === b.text ).style.align, 'center', 'text-align, as Figma names it' );
 		const centred = section.boxes.find( ( b ) => 'Centred' === b.text );
 		assert.deepEqual( [ centred.lx, centred.lw ], [ 0, 800 ], 'its layout box: the paragraph, not its ink' );
 		assert.ok( centred.w < 200 );
 		const bulleted = section.boxes.find( ( b ) => 'Bulleted item' === b.text );
 		assert.deepEqual( [ bulleted.lx, bulleted.lw ], [ 42, 758 ], 'inside its padding, where the bullet sits' );
-		// Mixed styles: the first character's, as Figma records a text layer's.
+		// Mixed styles: the one on most of the letters ("2026" is 4 of 13), the first character's kept.
 		const meta = section.boxes.find( ( b ) => 'text' === b.type && b.text.startsWith( '2026' ) );
-		assert.equal( meta.style.weight, '700' );
+		assert.deepEqual( [ meta.style.weight, meta.style0.weight ], [ '400', '700' ] );
 		const pill = section.boxes.find( ( b ) => 'surface' === b.type );
 		assert.deepEqual( pill.style, { fill: '#2c3f13', radius: '4', stroke: '#ffffff33/1' } );
+	} finally {
+		await browser.close();
+	}
+} );
+
+test( 'a text\'s style is the one on most of its letters, with its spacing, slant, decoration and case as drawn', { skip: ! chromium && 'Playwright Chromium not installed' }, async () => {
+	const browser = await chromium.launch( { executablePath } );
+	try {
+		const page = await browser.newPage( { viewport: { width: 800, height: 600 } } );
+		await page.setContent( `<style>
+			body { margin: 0 } p { margin: 0; font: 400 16px/1.5 sans-serif } .eyebrow { text-transform: uppercase; letter-spacing: 0.1em }
+			a { color: #1d5ae6 } em { font-style: italic } .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%) }
+		</style>
+		<main><section class="block-text">
+			<p class="eyebrow">how we work</p>
+			<p>Built for <b>every</b> property type</p>
+			<p><b>Half bold</b> half not</p>
+			<p><a href="#">A linked sentence here</a></p>
+			<p><em>Emphasised all the way</em></p>
+			<p>Visible words<b style="visibility: hidden"> and a long hidden bold note</b></p>
+			<p><span><b style="display: contents">Mostly bold words here</b></span> ok</p>
+			<p style="font-variant-caps: small-caps">Small caps text</p>
+		</section></main>` );
+		const [ section ] = await evaluateWithSections( page, extractPageBoxes, DEFAULT_CONFIG );
+		const style = ( start ) => section.boxes.find( ( b ) => 'text' === b.type && b.text.toLowerCase().startsWith( start ) ).style;
+		assert.deepEqual( [ style( 'how' ).case, style( 'how' ).ls ], [ 'upper', '1.6' ], 'text-transform and letter-spacing as drawn' );
+		assert.deepEqual( [ style( 'built' ).weight, style( 'built' ).case ], [ '400', 'sentence' ], 'one bold word of five' );
+		assert.equal( style( 'half' ).weight, undefined, 'no style on most of the letters: none' );
+		assert.deepEqual( [ style( 'a linked' ).deco, style( 'a linked' ).color ], [ 'underline', '#1d5ae6' ], 'a link\'s underline and colour' );
+		assert.equal( style( 'emphasised' ).italic, 'italic' );
+		assert.equal( style( 'visible' ).weight, '400', 'hidden text doesn\'t count' );
+		assert.equal( style( 'mostly bold' ).weight, '700', 'text in a display: contents element counts' );
+		assert.equal( style( 'small caps' ).case, undefined, 'small caps render neither case' );
+	} finally {
+		await browser.close();
+	}
+} );
+
+test( 'corners and borders are read per corner and side, and an image takes its clipping wrapper\'s corners', { skip: ! chromium && 'Playwright Chromium not installed' }, async () => {
+	const browser = await chromium.launch( { executablePath } );
+	try {
+		const page = await browser.newPage( { viewport: { width: 800, height: 600 } } );
+		const pixel = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/%3E';
+		await page.setContent( `<style>
+			body { margin: 0 } img { display: block; width: 300px; height: 200px }
+			.media { width: 300px; border-radius: 4px; overflow: hidden } .inner { overflow: hidden }
+			.round { width: 300px; border-radius: 20px; overflow: hidden } .round img { border-radius: 4px }
+			.corner { width: 100px; height: 100px; background: #fff; border-radius: 80px 0 0 0 }
+			.outer { width: 300px; border-radius: 12px; overflow: hidden } .wide { width: 300px; padding-bottom: 10px; margin-bottom: -10px }
+			.card { width: 300px; border-radius: 8px; overflow: hidden; background: #fff } .card img { height: 100px } .card p { margin: 0; height: 60px }
+			.clipped { clip-path: inset(0 round 10px) } .avatar { width: 48px; height: 48px; border-radius: 50% }
+			.oval { border-radius: 50% } .shape { clip-path: polygon(0 0, 100% 0, 50% 100%) }
+			.tab { width: 200px; height: 40px; background: #fff; border-bottom: 1px solid #cccccc; border-radius: 8px 8px 0 0 }
+			.dot { width: 40px; height: 40px; background: #fff; border-radius: 50% }
+			.framed { border: 2px solid #3d3d3d; border-radius: 6px }
+		</style>
+		<main><section class="block-media"><div class="media"><div class="inner"><img src='${ pixel }'></div></div><div class="round"><img src='${ pixel }'></div><div class="outer"><div class="wide"><img src='${ pixel }'></div></div><div class="card"><img src='${ pixel }'><p></p></div><img class="clipped" src='${ pixel }'><img class="avatar" src='${ pixel }'><img class="oval" src='${ pixel }'><img class="shape" src='${ pixel }'><div class="tab"></div><div class="dot"></div><div class="corner"></div><img class="framed" src='${ pixel }'></section></main>` );
+		const [ section ] = await evaluateWithSections( page, extractPageBoxes, DEFAULT_CONFIG );
+		const [ wrapped, round, outer, top, clipped, avatar, oval, shape, framed ] = section.boxes.filter( ( b ) => 'image' === b.type );
+		assert.deepEqual( [ oval.style, shape.style ], [ { stroke: 'none' }, { stroke: 'none' } ], 'an oval or another shape has no one radius' );
+		assert.equal( top.style.radius, '8 8 0 0', 'a card rounds the corners it shares with the photo' );
+		assert.equal( clipped.style.radius, '10', 'clip-path: inset( round )' );
+		assert.equal( avatar.style.radius, '24', 'a 50% circle' );
+		assert.equal( outer.style.radius, '12', 'a clipper further out, past a wrapper of another size' );
+		assert.deepEqual( wrapped.style, { radius: '4', stroke: 'none' }, 'the rounded wrapper, through a square one' );
+		assert.deepEqual( round.style, { radius: '20', stroke: 'none' }, 'the roundest clip shows' );
+		assert.deepEqual( framed.style, { radius: '6', stroke: '#3d3d3d/2' }, 'its own corners and border' );
+		const surface = ( w, h ) => section.boxes.find( ( b ) => 'surface' === b.type && w === b.w && h === b.h );
+		const [ tab, dot, corner ] = [ surface( 200, 41 ), surface( 40, 40 ), surface( 100, 100 ) ];
+		assert.equal( corner.style.radius, '80 0 0 0', 'one corner as large as it fits' );
+		assert.deepEqual( [ tab.style.radius, tab.style.stroke ], [ '8 8 0 0', 'none none #cccccc/1 none' ] );
+		assert.deepEqual( [ dot.style.radius, dot.style.stroke ], [ '20', 'none' ], 'a percentage of the box' );
+	} finally {
+		await browser.close();
+	}
+} );
+
+test( 'every line a section draws is recorded, however it is drawn', { skip: ! chromium && 'Playwright Chromium not installed' }, async () => {
+	const browser = await chromium.launch( { executablePath } );
+	try {
+		const page = await browser.newPage( { viewport: { width: 800, height: 600 } } );
+		await page.setContent( `<style>
+			body { margin: 0 } div { width: 400px; height: 40px; margin: 0 0 20px }
+			.border { border-bottom: 1px solid #ccc } .outline { outline: 1px solid #ccc }
+			.ring { box-shadow: 0 0 0 1px #ccc } .soft { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) }
+			.after { position: relative } .after::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #ccc }
+			.gradient { background: linear-gradient(#ccc, #ccc) no-repeat bottom / 100% 1px }
+			.fill-gradient { background: linear-gradient(#fff, #eee) } .offset { box-shadow: 0 2px 0 #ccc }
+			.far { box-shadow: 0 20px 0 #ccc }
+			.shrunk { box-shadow: 0 2px 0 -20px #ccc } .away { outline: 1px solid #ccc; outline-offset: 20px }
+			.round { border: 1px solid #ccc; border-radius: 20px }
+.rule { height: 1px; background: #ccc }
+			.hidden { position: relative } .hidden::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #ccc; opacity: 0 }
+			.clip { overflow: hidden; position: relative } .clip::after { content: ''; position: absolute; left: 0; right: 0; top: 60px; height: 1px; background: #ccc }
+		</style>
+		<main><section class="block-lines"><div class="border"></div><div class="outline"></div><div class="ring"></div><div class="soft"></div><div class="after"></div><div class="gradient"></div><div class="rule"></div><div class="hidden"></div><div class="clip"></div><div class="fill-gradient"></div><div class="offset"></div><div class="far"></div><div class="shrunk"></div><div class="away"></div><div class="round"></div></section></main>` );
+		const [ section ] = await evaluateWithSections( page, extractPageBoxes, DEFAULT_CONFIG );
+		// Each div's bottom edge: 40px tall, 20px apart (the rule is 1px tall, at 360).
+		const bottom = ( k ) => ( { x: 0, y: 60 * k, w: 400, h: 40 } );
+		const draws = ( k ) => drawsEdge( section.lines, bottom( k ), 2 );
+		assert.deepEqual( [ 0, 1, 2, 4, 5 ].map( draws ), [ true, true, true, true, true ], 'border, outline, ring, ::after rule, gradient' );
+		assert.equal( draws( 3 ), false, 'a soft shadow draws no line' );
+		assert.ok( drawsEdge( section.lines, { x: 0, y: 360, w: 400, h: 1 }, 0 ), 'a thin element is a rule' );
+		// The border adds a pixel, and the rule is 1px + 20px margin: the next divs start at 382 and 442.
+		assert.equal( drawsEdge( section.lines, { x: 0, y: 382, w: 400, h: 40 }, 2 ), false, 'an invisible ::after draws nothing' );
+		assert.equal( drawsEdge( section.lines, { x: 0, y: 442, w: 400, h: 60 }, 2 ), false, 'nor one its own overflow hides' );
+		// Then a 40px gradient fill (at 502) and a shadow offset 2px down (at 562).
+		assert.deepEqual( [ 0, 2 ].map( ( side ) => drawsEdge( section.lines, { x: 0, y: 502, w: 400, h: 40 }, side ) ), [ false, false ], 'a gradient fill draws no rule' );
+		assert.deepEqual( [ 0, 1, 2, 3 ].map( ( side ) => drawsEdge( section.lines, { x: 0, y: 562, w: 400, h: 40 }, side ) ), [ false, false, true, false ], 'an offset shadow draws its side only' );
+		assert.deepEqual( [ 0, 1, 2, 3 ].map( ( side ) => drawsEdge( section.lines, { x: 0, y: 622, w: 400, h: 40 }, side ) ), [ false, false, false, false ], 'one 20px off draws away from the edge' );
+		const any = ( y ) => [ 0, 1, 2, 3 ].some( ( s ) => drawsEdge( section.lines, { x: 0, y, w: 400, h: 40 }, s ) );
+		assert.deepEqual( [ any( 682 ), any( 742 ) ], [ false, false ], 'a shadow spread in 20px, an outline 20px out' );
+		// A pill: its straight runs are its top and bottom edges clear of the corners, 360 of 400px.
+		const round = ( s ) => drawsEdge( section.lines, { x: 0, y: 802, w: 400, h: 40 }, s );
+		assert.deepEqual( [ 0, 1, 2, 3 ].map( round ), [ true, false, true, false ], 'a pill has no straight sides' );
+		// The bottom-positioned 1px gradient (at 300) draws its bottom edge only.
+		assert.deepEqual( [ 0, 1, 2, 3 ].map( ( side ) => drawsEdge( section.lines, { x: 0, y: 300, w: 400, h: 40 }, side ) ), [ false, false, true, false ], 'a gradient rule where it sits' );
 	} finally {
 		await browser.close();
 	}

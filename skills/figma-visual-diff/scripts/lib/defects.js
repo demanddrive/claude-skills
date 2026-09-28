@@ -29,8 +29,27 @@ export const OWNERS = {
 	visual: 'page-or-developer',
 };
 
-export const TOKEN_LABELS = { font: 'font', size: 'font size', lh: 'line height', weight: 'font weight', color: 'text colour', fill: 'fill', radius: 'corner radius', stroke: 'border', align: 'text alignment', 'text-style': 'text style' };
-export const TOKEN_UNITS = { size: 'px', lh: 'px', radius: 'px' };
+export const TOKEN_LABELS = { font: 'font', size: 'font size', lh: 'line height', weight: 'font weight', color: 'text colour', fill: 'fill', radius: 'corner radius', stroke: 'border', align: 'text alignment', 'text-style': 'text style', ls: 'letter spacing', italic: 'italic', deco: 'text decoration', case: 'letter case' };
+export const TOKEN_UNITS = { size: 'px', lh: 'px', radius: 'px', ls: 'px' };
+
+const PER_SIDE = { radius: [ 'top-left', 'top-right', 'bottom-right', 'bottom-left' ], stroke: [ 'top', 'right', 'bottom', 'left' ] };
+
+/**
+ * A token's value as people read it, with its unit; corners and sides named where they differ
+ * ("top-left 8px, top-right 8px, bottom-right 0px, bottom-left 0px").
+ *
+ * @param {string} property Token name.
+ * @param {string} value    Token value, as triage.json records it.
+ * @return {string}
+ */
+export function tokenValue( property, value ) {
+	const unit = TOKEN_UNITS[ property ] ?? '';
+	const parts = String( value ).split( ' ' );
+	if ( PER_SIDE[ property ] && 4 === parts.length ) {
+		return parts.map( ( v, i ) => `${ PER_SIDE[ property ][ i ] } ${ v }${ 'none' === v ? '' : unit }` ).join( ', ' );
+	}
+	return `${ value }${ 'none' === value ? '' : unit }`;
+}
 
 /** Relative aspect-ratio change an image may show before it counts: whole-pixel rounding. */
 const ASPECT_TOLERANCE = 0.02;
@@ -141,10 +160,9 @@ export function sectionDefects( w, p, args ) {
 	// card title a size smaller), with how many do.
 	for ( const { property, figma, page, count, element } of group( w.styles || [], ( d ) => [ d.element.type, d.property, d.figma, d.page ] ) ) {
 		const name = `${ element.type }${ element.text ? ` "${ element.text }"` : '' }${ count > 1 ? ` and ${ count - 1 } more like it` : '' }`;
-		const unit = TOKEN_UNITS[ property ] ?? '';
 		const summary = 'text-style' === property
 			? `text style ${ figma } (e.g. "${ element.text }") isn't used on the page${ page ? `; closest: ${ page }` : '' }`
-			: `${ name }: ${ TOKEN_LABELS[ property ] } ${ figma }${ unit } in Figma, ${ page }${ unit } on the page`;
+			: `${ name }: ${ TOKEN_LABELS[ property ] } ${ tokenValue( property, figma ) } in Figma, ${ tokenValue( property, page ) } on the page`;
 		defects.push( defect( 'visual', 'style', { property, figma, page, count, element }, summary ) );
 	}
 	// Pixels only add information once geometry agrees; otherwise they re-report the layout.

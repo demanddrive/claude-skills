@@ -20,6 +20,8 @@
  * the environment variable the provider names, never from config files.
  */
 
+import { tokenValue } from './defects.js';
+
 /** The default provider. */
 export const ZEN = { url: 'https://opencode.ai/zen/v1/systemone', model: 'jev-1.13-free', keyEnv: 'OPENCODE_API_KEY' };
 
@@ -87,6 +89,13 @@ export function colourDistance( a, b ) {
 
 /** One design token's difference, spelled out for judging. */
 function tokenChange( key, figma, page ) {
+	// Corners or sides that differ from each other, or a border one side doesn't have, read as
+	// they are: there's no one number to compare.
+	const perSide = ( v ) => v.includes( ' ' );
+	if ( ( 'radius' === key || 'stroke' === key ) && ( perSide( figma ) || perSide( page ) || 'none' === figma ) ) {
+		const read = ( v ) => tokenValue( key, v ).replace( /(#[0-9a-f]+)\/([\d.]+)/gi, '$2px $1' );
+		return `${ 'stroke' === key ? 'border' : 'corner radius' } in Figma: ${ read( figma ) }; on the page: ${ read( page ) }`;
+	}
 	if ( 'color' === key || 'fill' === key ) {
 		return colourDistance( figma, page );
 	}
@@ -100,13 +109,13 @@ function tokenChange( key, figma, page ) {
 	if ( 'weight' === key ) {
 		return `${ WEIGHTS[ figma ] ?? figma } (${ figma }) in Figma, ${ WEIGHTS[ page ] ?? page } (${ page }) on the page`;
 	}
-	if ( 'font' === key || 'align' === key ) {
+	if ( 'font' === key || 'align' === key || 'italic' === key || 'deco' === key || 'case' === key ) {
 		return `${ figma } in Figma, ${ page } on the page`;
 	}
 	return change( Number( figma ), Number( page ) );
 }
 
-const TOKEN_NAMES = { font: 'font family', size: 'font size', lh: 'line height', weight: 'font weight', color: 'text colour', fill: 'fill colour', radius: 'corner radius', stroke: 'border', align: 'text alignment' };
+const TOKEN_NAMES = { font: 'font family', size: 'font size', lh: 'line height', weight: 'font weight', color: 'text colour', fill: 'fill colour', radius: 'corner radius', stroke: 'border', align: 'text alignment', ls: 'letter spacing', italic: 'italic or upright', deco: 'underline or strike-through', case: 'letter case as drawn (upper, lower, title, sentence or mixed)' };
 
 /**
  * What one defect is, in the terms a reviewer judges it by.
