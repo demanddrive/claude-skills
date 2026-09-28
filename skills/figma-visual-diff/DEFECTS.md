@@ -116,5 +116,6 @@ defect selected, so a ticket can link to it.
   the elements matched on both sides, like a side-by-side text diff. Grey stripes are gaps:
   rows only the other side has (more space, an extra field, a line more of text). In the diff
   panel, content in a gap shows red, since the other side doesn't have it; extra space alone
-  costs nothing, so read spacing from the `spacing` defects, not the panels. Magenta areas are
-  images present on both sides, masked so placeholder photos don't count as differences.
+  costs nothing, so read spacing from the `spacing` defects, not the panels. Images present on both
+  sides are masked so placeholder photos don't count as differences: the Figma and page panels
+  show them as they are, and the diff panel paints them magenta.

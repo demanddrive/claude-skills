@@ -103,7 +103,7 @@ function alignedImage( src, rows, width ) {
 	return out;
 }
 
-/** Paint masked images magenta, so the panels show what was left out. */
+/** Paint masked images magenta: on the copies compared, so they match, and on the diff, to show what was left out. */
 function paintMedia( png, mask ) {
 	for ( let i = 0; i < mask.length; i++ ) {
 		if ( MEDIA === mask[ i ] ) {
@@ -154,10 +154,9 @@ export function compareSection( a, png, section, segments, width, media, refine 
 		const rows = pRows.map( ( r ) => ( r >= 0 && r + delta >= 0 && r + delta < hp ? r + delta : -1 ) );
 		// Masked where the images are with this shift: a page image moves with its rows.
 		const media0 = media ? mediaMask( shifted, width, media.figma, media.page, a.height, hp ) : new Uint8Array( width * n );
+		// The Figma and page panels keep their images, for a person to look at.
 		const shown = alignedImage( a, fRows, width );
-		paintMedia( shown, media0 );
 		const b = alignedImage( page, rows, width );
-		paintMedia( b, media0 );
 		// Rows one side lacks are striped on both copies compared, so pixelmatch sees no difference
 		// there; their content is counted below instead.
 		const mask = media0.slice();
@@ -170,6 +169,8 @@ export function compareSection( a, png, section, segments, width, media, refine 
 		const bb = new PNG( { width, height: n } );
 		shown.data.copy( aa.data );
 		b.data.copy( bb.data );
+		paintMedia( aa, media0 );
+		paintMedia( bb, media0 );
 		for ( let i = 0; i < mask.length; i++ ) {
 			if ( GAP === mask[ i ] ) {
 				aa.data.writeUInt32BE( 0xe6e6e6ff, i * 4 );
@@ -178,6 +179,7 @@ export function compareSection( a, png, section, segments, width, media, refine 
 		}
 		const diff = new PNG( { width, height: n } );
 		const mismatched = pixelmatch( aa.data, bb.data, diff.data, width, n, { threshold: 0.1, includeAA: false, alpha: 0.2 } );
+		paintMedia( diff, media0 );
 		// Each side's background, from its own rows (not its gaps or masked images).
 		const own = ( rowsOf ) => {
 			const m = media0.slice();

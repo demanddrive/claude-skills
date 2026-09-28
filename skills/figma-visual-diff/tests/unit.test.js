@@ -707,7 +707,8 @@ test( 'the image mask moves with the page when pixels refine the alignment', asy
 	const media = { figma: [ { x: 0, y: 20, width: 40, height: 20 } ], page: [ { x: 0, y: 22, width: 40, height: 20 } ] };
 	const best = compareSection( figma, page, { y: 0, height: 100 }, alignRows( [], 100, 100 ), 40, media );
 	assert.deepEqual( [ best.score, best.refine ], [ 1, 2 ], 'no edge of the photo is compared' );
-	assert.equal( rowsWith( best.b, RED ).size, 0, 'the whole page photo is masked' );
+	assert.equal( rowsWith( best.b, RED ).size, 20, 'the page panel keeps its photo' );
+	assert.deepEqual( [ ...rowsWith( best.diff, [ 255, 0, 255 ] ) ], [ ...rowsWith( best.b, RED ) ], 'the diff panel shows the whole photo masked' );
 } );
 
 test( 'a repeating grid missing a row still loses score, however it was matched', async () => {
