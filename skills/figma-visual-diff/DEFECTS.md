@@ -100,12 +100,16 @@ page/breakpoint runs folder, which keeps the build's history after old runs are 
 
 ## `report.html`
 
-For a person reviewing Jev: an overview of every module's rule verdict beside Jev's answers,
-flags where they disagree (rules pass a module Jev wouldn't sign off, defects Jev thinks nobody
-would ask to fix), and per module the defects ordered by how worth fixing they are, with a Figma
-| page preview of each element, what Jev was shown and asked, and the overlays. Selecting a
-defect outlines it on the overlays, and `report.html#d-<id>` (e.g. `#d-9.6`) opens with that
-defect selected, so a ticket can link to it.
+For a person reviewing each defect. A list on the left holds every defect, grouped by module
+and ordered by how worth fixing Jev thinks it is; each module row carries its rule verdict,
+Jev's judgement and a flag where they disagree (rules pass a module Jev wouldn't sign off,
+defects Jev thinks nobody would ask to fix). Filters narrow it by kind, owner, Jev's call or
+disagreements. The pane on the right shows one defect: large Figma and page crops around it,
+its values on both sides, and the whole section with it outlined. A module row shows the
+module: Jev's answers, what Jev was shown and asked, and the overlays. Previous and Next step
+through the defects the filters leave. Swipe stacks Figma and the page in one frame, split at a
+divider you drag, for the crops and the whole section. Copy ticket copies the defect as
+markdown with its link: `report.html#d-<id>` (e.g. `#d-9.6`) opens with that defect shown.
 
 ## Overlays
 
