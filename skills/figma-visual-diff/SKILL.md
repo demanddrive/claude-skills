@@ -37,7 +37,8 @@ With `FIGMA_TOKEN` set (a read-only personal access token), pass `--file-key <ke
 
    Load the figma-use guidance the Figma MCP requires, run the printed code through
    `use_figma` unchanged (it is read-only), and save the returned string **verbatim** to a
-   temp file, e.g. `/tmp/figma-boxes-<width>.txt`: exactly as returned, however long.
+   temp file named for its frame, `/tmp/figma-boxes-<node-id>.txt` (`:` as `-`): exactly as
+   returned, however long. Page agents running side by side each write their own frames.
 2. `get_screenshot` with `maxDimension` set to the frame height (the `F|width|height` line)
    rounded up. Keep the returned image URL.
 
@@ -47,12 +48,12 @@ Done when the boxes file is saved and you have the screenshot URL (or `FIGMA_TOK
 
 ```bash
 node <skill-dir>/scripts/triage.js --url <page-url> --width <frame-width> \
-  --figma /tmp/figma-boxes-<width>.txt --figma-png-url '<screenshot-url>' \
-  --runs-root ${CLAUDE_PLUGIN_DATA}/runs
+  --figma /tmp/figma-boxes-<node-id>.txt --figma-png-url '<screenshot-url>'
 ```
 
 Exit 0: every section is ok or dynamic. 1: there are defects. 2: an error. Triage stores the
-Figma inputs and a dated folder per run (with `latest`) in the plugin's data, and prints where
+Figma inputs and a dated folder per run (with `latest`) in the project's
+`.claude/figma-visual-diff/runs`, kept out of git by its own `.gitignore`, and prints where
 it wrote `triage.json` and `report.html` and what changed since the previous run; pass inputs
 from anywhere and let it store them. Re-runs for the same page and width reuse the stored
 inputs, so drop `--figma` and `--figma-png-url` unless the design changed. The screenshot URL

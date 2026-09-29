@@ -35,7 +35,6 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { installDeps } from './deps.js';
 import { isMain } from './lib/cli.js';
 import { figmaScript } from './lib/figma.js';
@@ -112,10 +111,42 @@ export function projectRoot( dir ) {
 	}
 }
 
+const LOCAL_DIR = path.join( '.claude', 'figma-visual-diff' );
+
+/** The project's own runs folder, <repo>/.claude/figma-visual-diff/runs: local to this checkout. */
+export function localRunsRoot( dir = process.env.CLAUDE_PROJECT_DIR || process.cwd() ) {
+	return path.join( projectRoot( dir ), LOCAL_DIR, 'runs' );
+}
+
+/**
+ * Keep a runs folder under .claude/figma-visual-diff out of git with a .gitignore of its own,
+ * so no project's .gitignore needs editing. Leaves any other folder, and an existing file, alone.
+ *
+ * @param {string} dir A runs folder, or any folder inside one.
+ */
+export function keepRunsLocal( dir ) {
+	const resolved = path.resolve( dir );
+	// Whole path components only: other.claude/figma-visual-diff is someone else's folder.
+	const at = resolved.lastIndexOf( path.sep + LOCAL_DIR + path.sep );
+	if ( at < 0 ) {
+		return;
+	}
+	const base = resolved.slice( 0, at + 1 + LOCAL_DIR.length );
+	fs.mkdirSync( base, { recursive: true } );
+	// Created only if absent, in one step: parallel page agents reach here at once.
+	try {
+		fs.writeFileSync( path.join( base, '.gitignore' ), '*\n', { flag: 'wx' } );
+	} catch ( error ) {
+		if ( 'EEXIST' !== error.code ) {
+			throw error;
+		}
+	}
+}
+
 /**
  * Where a page and breakpoint's Figma files and dated runs live:
- * <runs-root>/<project>/<page-slug>/<width>. The root is the plugin's persistent data
- * directory when installed as a plugin (it survives updates), else runs/ beside the skill.
+ * <runs-root>/<project>/<page-slug>/<width>. The root is localRunsRoot() unless given, so every
+ * agent and session in a project shares one history, whatever plugin data it has.
  *
  * @param {string} url     Page URL.
  * @param {number} width   Breakpoint width.
@@ -123,11 +154,9 @@ export function projectRoot( dir ) {
  * @return {string} Directory path.
  */
 export function runsDir( url, width, options = {} ) {
-	// Outside a plugin install, "${CLAUDE_PLUGIN_DATA}" arrives unsubstituted; ignore it.
+	// An unsubstituted "${CLAUDE_PLUGIN_DATA}" from an older command line means no root was given.
 	const given = options.runsRoot && ! options.runsRoot.includes( '${' ) ? options.runsRoot : null;
-	const root = given
-		|| ( process.env.CLAUDE_PLUGIN_DATA && path.join( process.env.CLAUDE_PLUGIN_DATA, 'runs' ) )
-		|| path.join( path.dirname( fileURLToPath( import.meta.url ) ), '..', 'runs' );
+	const root = given || localRunsRoot();
 	const project = options.project || path.basename( process.env.CLAUDE_PROJECT_DIR || projectRoot( process.cwd() ) );
 	const page = new URL( url ).pathname.replace( /^\/|\/$/g, '' ).replace( /[^a-z0-9]+/gi, '-' ) || 'home';
 	return path.join( root, project, page, String( width ) );
@@ -143,6 +172,7 @@ if ( isMain( import.meta.url ) ) {
 	if ( 'runs-dir' === command && rest.length >= 2 ) {
 		const dir = runsDir( rest[ 0 ], rest[ 1 ], { runsRoot: rest[ 2 ] } );
 		fs.mkdirSync( dir, { recursive: true } );
+		keepRunsLocal( dir );
 		process.stdout.write( `${ dir }\n` );
 		process.exit( 0 );
 	}

@@ -11,7 +11,7 @@ import os from 'node:os';
 
 import { execFileSync } from 'node:child_process';
 
-import { DEFAULT_CONFIG, loadConfig, projectRoot, runsDir, userConfigFile } from '../scripts/config.js';
+import { DEFAULT_CONFIG, keepRunsLocal, loadConfig, localRunsRoot, projectRoot, runsDir, userConfigFile } from '../scripts/config.js';
 import { loadDeps, packageRoot } from '../scripts/deps.js';
 import { fetchFigmaFrame } from '../scripts/figma-rest.js';
 import { DEFAULTS, importFigma, parseArgs, pruneRuns, sameSection, triageSection, validateReport } from '../scripts/triage.js';
@@ -57,6 +57,28 @@ test( 'runsDir groups by project, page and width, and ignores an unsubstituted p
 	assert.ok( ! dir.includes( '${' ), dir );
 	assert.ok( dir.endsWith( path.join( 'acme', 'about-us', '375' ) ), dir );
 	assert.equal( runsDir( 'https://site.test/', 1440, { runsRoot: '/data/runs', project: 'acme' } ), path.join( '/data/runs', 'acme', 'home', '1440' ) );
+} );
+
+test( 'runs live in the project\'s .claude folder, which keeps itself out of git', () => {
+	const repo = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-repo-' ) );
+	fs.mkdirSync( path.join( repo, '.git' ) );
+	fs.mkdirSync( path.join( repo, 'theme', 'src' ), { recursive: true } );
+	const root = localRunsRoot( path.join( repo, 'theme', 'src' ) );
+	assert.equal( root, path.join( repo, '.claude', 'figma-visual-diff', 'runs' ), 'from anywhere in the repo' );
+	const dir = path.join( root, 'acme', 'about', '1440' );
+	keepRunsLocal( dir );
+	const ignore = path.join( repo, '.claude', 'figma-visual-diff', '.gitignore' );
+	assert.equal( fs.readFileSync( ignore, 'utf8' ), '*\n' );
+	fs.writeFileSync( ignore, 'runs/\n' );
+	keepRunsLocal( dir );
+	assert.equal( fs.readFileSync( ignore, 'utf8' ), 'runs/\n', 'an existing .gitignore is left as it is' );
+	const elsewhere = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-runs-' ) );
+	keepRunsLocal( path.join( elsewhere, 'acme', 'about', '1440' ) );
+	assert.deepEqual( fs.readdirSync( elsewhere ), [], 'a --runs-root folder is the user\'s: nothing is written there' );
+	keepRunsLocal( path.join( elsewhere, 'other.claude', 'figma-visual-diff', 'runs', 'a' ) );
+	assert.deepEqual( fs.readdirSync( elsewhere ), [], 'only a folder named .claude counts' );
+	fs.rmSync( repo, { recursive: true, force: true } );
+	fs.rmSync( elsewhere, { recursive: true, force: true } );
 } );
 
 test( 'sections pair by name, reporting what is missing', () => {

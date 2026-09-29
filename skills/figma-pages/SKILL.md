@@ -62,6 +62,7 @@ Done when every page has a report or a stated failure.
 - **Developer tasks:** every defect the agents left for a developer (one no block setting or
   content fixes), merged across pages. The
   same block with the same defect on several pages (a margin, a font size) is one task
-  naming each page and defect `id`. Sections that need a new block are tasks for figma-block.
-- **Needs a decision:** refused replacements, site data (post counts, form setup), design
-  differences between breakpoints, hidden layers that aren't proven states.
+  naming each page and defect `id`. So is one block needing per-breakpoint visibility
+  across pages. Sections that need a new block are tasks for figma-block.
+- **Needs a decision:** refused replacements, site data (post counts, form setup), hidden
+  layers that aren't proven states.

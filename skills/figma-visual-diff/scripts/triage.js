@@ -33,7 +33,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, runsDir } from './config.js';
+import { keepRunsLocal, loadConfig, runsDir } from './config.js';
 import { loadDeps } from './deps.js';
 import { fetchFigmaFrame } from './figma-rest.js';
 import { isMain, parseFlags } from './lib/cli.js';
@@ -99,6 +99,7 @@ export function parseArgs( argv ) {
  */
 export async function importFigma( args, download = fetch ) {
 	fs.mkdirSync( args.figmaDir, { recursive: true } );
+	keepRunsLocal( args.figmaDir );
 	for ( const [ from, to ] of [ [ args.figmaSource, args.figma ], [ args.figmaPngSource, args.figmaPng ] ] ) {
 		if ( from && path.resolve( from ) !== path.resolve( to ) ) {
 			fs.copyFileSync( from, to );

@@ -118,8 +118,20 @@ section height are a column count. Fix the cause and re-run. An empty JavaScript
 block is usually the build (a bundle mangled by a cache or minify plugin): check the browser
 console and report it.
 
-Done when a run shows only developer defects and `dynamic` sections, each developer defect
-with the setting you ruled out.
+**Every breakpoint is a fix target, and one page serves them all.** A setting or content change
+applies at every width, so after each fix re-run the diff at every breakpoint, not only the
+one you fixed. Keep a fix only when no breakpoint regresses: triage prints each section's
+change since its previous run. A defect whose every fix makes another breakpoint worse is a
+developer defect.
+
+**Breakpoint content differences.** When the frames themselves hold different content (the
+mobile frame drops a card, a slider or a whole section, or shows a button the desktop frame
+hides), no content change fits both, since the page holds one set. Keep the widest frame's
+content and make each difference a developer defect: the block needs per-breakpoint
+visibility.
+
+Done when a run at every breakpoint shows only developer defects and `dynamic` sections, each
+developer defect with the setting you ruled out.
 
 ## 5. Report
 
@@ -127,9 +139,11 @@ with the setting you ruled out.
   `report.html`.
 - The section → block table.
 - Developer tasks: each developer defect as `id`, block slug, `summary` and why no setting
-  fixes it, plus sections needing a new block.
+  fixes it, plus sections needing a new block. A breakpoint content difference names the block,
+  the breakpoint, and each item's node id: `content-cards: hide on mobile — Drive card 12:340,
+  2 team cards 12:411, 12:412`.
 - Interactive sections: each block's item count and the node id behind every item, e.g.
   `image-slider: 4 — 12:301 (visible), 12:302, 12:303, 12:304 (hidden)`. The diff sees only a
   slider's first slide, so these ids are the check on the rest.
-- Needs a decision: refused replacements, site data (item counts, form setup), design
-  differences between breakpoints, hidden layers that aren't proven states.
+- Needs a decision: refused replacements, site data (item counts, form setup), hidden layers
+  that aren't proven states.
