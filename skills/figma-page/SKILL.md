@@ -87,8 +87,9 @@ The server enforces structure; intent is yours:
 - **Forms**: read the fields from the design (labels, types, a dropdown's options, required
   marks, widths: two side by side are `half`) and the consent line, a required `checkbox`
   whose one option is its text, or `gdpr` when `discover` lists it. Write them with
-  `mcps-form` `action: "set"`, key `figma-<page-slug>-<section>`, so a re-run updates that
-  form, and put the returned `form_id` in the block's `form` with `form_provider: formidable`.
+  `mcps-form` `action: "set"`, keyed by the form, not the page (`figma-contact`), so every
+  page showing that form shares it and a re-run updates it. Put the returned `form_id` in the
+  block's `form` with `form_provider: formidable`.
   HubSpot only with the user's portal and form ids. Without `mcps-form`, keep the block's
   form and list it under "Needs a decision".
 
