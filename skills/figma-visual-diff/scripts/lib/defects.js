@@ -16,7 +16,7 @@
  * that side. triage.schema.json describes each defect's fields.
  */
 
-import { describe, MAX_OFFSETS } from './boxes.js';
+import { ASPECT_TOLERANCE, aspectChange, describe, MAX_OFFSETS } from './boxes.js';
 import { signedPx as sign } from './cli.js';
 
 export const SEVERITY = [ 'structure', 'content', 'alignment', 'layout', 'visual' ];
@@ -51,11 +51,7 @@ export function tokenValue( property, value ) {
 	return `${ value }${ 'none' === value ? '' : unit }`;
 }
 
-/** Relative aspect-ratio change an image may show before it counts: whole-pixel rounding. */
-const ASPECT_TOLERANCE = 0.02;
 const round2 = ( n ) => Math.round( n * 100 ) / 100;
-/** How much an image's shape changed: its page aspect ratio over its Figma one, minus 1. */
-const aspectChange = ( o ) => ( o.page.w / o.page.h ) / ( o.figma.w / o.figma.h ) - 1;
 
 const defect = ( kind, issue, fields, summary ) => ( { kind, issue, owner: OWNERS[ kind ], summary, ...fields } );
 
@@ -100,7 +96,7 @@ function spacingSummary( s ) {
  *
  * @param {Object}      w    Wireframe report section.
  * @param {Object|null} p    Pixel report section for the same Figma section, if compared.
- * @param {Object}      args Thresholds: alignmentShift, tolerance, heightTolerance, pixelThreshold.
+ * @param {Object}      args Thresholds: alignmentShift, tolerance, sizeTolerance, heightTolerance, pixelThreshold.
  * @return {Array} Defects; empty when the section matches or is masked.
  */
 export function sectionDefects( w, p, args ) {
@@ -117,7 +113,7 @@ export function sectionDefects( w, p, args ) {
 		...w.copy.map( ( c ) => defect( 'content', 'copy', { figma: c.figma, page: c.page }, `copy "${ c.figma.text }" → "${ c.page.text }"` ) ),
 		...w.shifted.map( ( s ) => defect( 'alignment', 'shifted', { figma: s.figma, page: s.page, delta: { x: s.dx } }, `${ describe( s.figma ) } shifted ${ sign( s.dx ) }` ) ),
 	];
-	const { dx, dy, resized } = w.drift;
+	const { dx, dy } = w.drift;
 	if ( ! w.shifted.length && Math.abs( dx ) >= args.alignmentShift && Math.abs( dx ) > Math.abs( dy ) ) {
 		defects.push( defect( 'alignment', 'content-shifted', { delta: { x: dx } }, `section content shifted ${ sign( dx ) } horizontally` ) );
 	}
@@ -126,30 +122,32 @@ export function sectionDefects( w, p, args ) {
 		defects.push( defect( 'layout', 'height', { figma: w.figmaHeight, page: w.pageHeight, delta: w.heightDelta }, `section height ${ w.figmaHeight } → ${ w.pageHeight } (${ sign( w.heightDelta ) })` ) );
 	}
 	// Elements of a different size, largest offsets first (the wireframe report keeps a dozen):
-	// each is a size to fix. Elements that only moved are left out; they mostly follow from
-	// something above them changing size, and the overlays show where they went.
-	if ( w.live || tallerOrShorter || ( 'fail' === w.status && ( resized || Math.abs( dy ) > args.tolerance ) ) ) {
-		for ( const o of w.offsets ) {
-			if ( Math.abs( o.dw ) <= args.tolerance && Math.abs( o.dh ) <= args.tolerance ) {
-				continue;
-			}
-			// An image's size follows its column; its aspect ratio is what the build controls
-			// (cropping, object-fit). So a scaled image is fine and only its shape is a defect.
-			if ( 'image' === o.figma.type ) {
-				const change = aspectChange( o );
-				if ( Math.abs( change ) > ASPECT_TOLERANCE ) {
-					const [ figmaRatio, pageRatio ] = [ o.figma.w / o.figma.h, o.page.w / o.page.h ];
-					const shape = change > 0 ? 'wider' : 'taller';
-					defects.push( defect( 'layout', 'aspect', { figma: o.figma, page: o.page, ratio: { figma: round2( figmaRatio ), page: round2( pageRatio ) } },
-						`${ describe( o.figma ) } is ${ o.page.w }×${ o.page.h } on the page: aspect ratio ${ round2( figmaRatio ) } in Figma, ${ round2( pageRatio ) } on the page (${ Math.round( Math.abs( change ) * 100 ) }% ${ shape })` ) );
-				}
-				continue;
-			}
-			const summary = o.textBox
-				? `${ describe( o.figma ) }: text box ${ o.textBox.figma }px wide in Figma, ${ o.textBox.page }px on the page (${ sign( o.dw ) }), ${ sign( o.dh ) } tall`
-				: `${ describe( o.figma ) } is ${ o.page.w }×${ o.page.h } on the page (${ sign( o.dw ) } wide, ${ sign( o.dh ) } tall)`;
-			defects.push( defect( 'layout', 'resized', { figma: o.figma, page: o.page, delta: { w: o.dw, h: o.dh }, ...( o.textBox ? { textBox: o.textBox } : {} ) }, summary ) );
+	// each is a size to fix, in a section that passes too (logos a size up keep its score).
+	// Elements that only moved are left out; they mostly follow from something above them
+	// changing size, and the overlays show where they went.
+	for ( const o of w.offsets ) {
+		// A text's box follows its font's metrics, so it keeps the wider tolerance; a box's
+		// size (an input, a button, a logo) is set exactly and is compared to sizeTolerance.
+		const t = 'text' === o.figma.type ? args.tolerance : args.sizeTolerance;
+		if ( Math.abs( o.dw ) <= t && Math.abs( o.dh ) <= t ) {
+			continue;
 		}
+		// An image's size follows its column; its aspect ratio is what the build controls
+		// (cropping, object-fit). So a scaled image is fine and only its shape is a defect.
+		if ( 'image' === o.figma.type ) {
+			const change = aspectChange( o );
+			if ( Math.abs( change ) > ASPECT_TOLERANCE ) {
+				const [ figmaRatio, pageRatio ] = [ o.figma.w / o.figma.h, o.page.w / o.page.h ];
+				const shape = change > 0 ? 'wider' : 'taller';
+				defects.push( defect( 'layout', 'aspect', { figma: o.figma, page: o.page, ratio: { figma: round2( figmaRatio ), page: round2( pageRatio ) } },
+					`${ describe( o.figma ) } is ${ o.page.w }×${ o.page.h } on the page: aspect ratio ${ round2( figmaRatio ) } in Figma, ${ round2( pageRatio ) } on the page (${ Math.round( Math.abs( change ) * 100 ) }% ${ shape })` ) );
+			}
+			continue;
+		}
+		const summary = o.textBox
+			? `${ describe( o.figma ) }: text box ${ o.textBox.figma }px wide in Figma, ${ o.textBox.page }px on the page (${ sign( o.dw ) }), ${ sign( o.dh ) } tall`
+			: `${ describe( o.figma ) } is ${ o.page.w }×${ o.page.h } on the page (${ sign( o.dw ) } wide, ${ sign( o.dh ) } tall)`;
+		defects.push( defect( 'layout', 'resized', { figma: o.figma, page: o.page, delta: { w: o.dw, h: o.dh }, ...( o.textBox ? { textBox: o.textBox } : {} ) }, summary ) );
 	}
 	// Spacing: one defect per differing space, however many share it (e.g. every card's gap
 	// under its image), naming the margins in it, which say where to fix it.

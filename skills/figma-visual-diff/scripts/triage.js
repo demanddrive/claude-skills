@@ -51,7 +51,9 @@ export const DEFAULTS = {
 	pixelThreshold: 0.7,
 	alignmentShift: 40,
 	tolerance: 8,
-	heightTolerance: 24,
+	// Non-text boxes (inputs, buttons) are sized exactly; a text box follows the font's metrics.
+	sizeTolerance: 3,
+	heightTolerance: 16,
 	viewportHeight: 900,
 };
 
@@ -266,7 +268,7 @@ async function main() {
 	for ( let attempt = 1; attempt <= 2; attempt++ ) {
 		// Sequential on purpose: two browsers loading the page at once perturb each other's
 		// capture (lazy media, slider timing), which made scores vary between runs.
-		await runDiff( 'wireframe-diff.js', [ ...common, '--out', path.join( args.out, 'wireframe' ), '--figma', args.figma, '--threshold', String( args.wireframeThreshold ) ] );
+		await runDiff( 'wireframe-diff.js', [ ...common, '--out', path.join( args.out, 'wireframe' ), '--figma', args.figma, '--threshold', String( args.wireframeThreshold ), '--size-tolerance', String( args.sizeTolerance ) ] );
 		// Pixels are lined up at the elements the wireframe diff just matched, never searched for.
 		await runDiff( 'pixel-diff.js', [
 			...common,
@@ -290,6 +292,7 @@ async function main() {
 	const report = {
 		warnings: [
 			...( wireframe.warnings || [] ),
+			...( pixel.warnings || [] ),
 			...( unstable ? [ 'The page rendered differently between loads (section heights disagree), even after a retry. Verdicts are unreliable; check the site for failing or late assets.' ] : [] ),
 		],
 		unstable,

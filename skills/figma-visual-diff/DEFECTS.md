@@ -94,7 +94,10 @@ difference, reported as such. A section's background holds no spaces of its own:
 inside it is the space to the section's edge.
 
 Elements that only moved aren't defects: they follow from something above changing size, and
-the overlays show them.
+the overlays show them. An element of a different size is a `resized` defect in any section,
+even one that otherwise passes: over 8px for text (its box follows the font's metrics), over
+3px for any other box (an input, a button, a card). A section taller or shorter by over 16px is
+a `height` defect.
 
 Sliders are compared too: before measuring, the scripts interact once (so scripts delayed until
 interaction, e.g. by caching plugins, run), stop autoplay and park Swiper sliders on their

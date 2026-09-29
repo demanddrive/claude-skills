@@ -319,3 +319,29 @@ test( 'what isn\'t on screen isn\'t extracted: clipped slides, screen-reader tex
 		await browser.close();
 	}
 } );
+
+test( 'a select shows its chosen option, and a checkbox label\'s words are one text beside the box', { skip: ! chromium && 'Playwright Chromium not installed' }, async () => {
+	const browser = await chromium.launch( { executablePath } );
+	try {
+		const page = await browser.newPage( { viewport: { width: 800, height: 600 } } );
+		await page.setContent( `<style>
+			body { margin: 0; font: 16px/24px sans-serif } select { width: 300px; height: 48px; padding: 0 12px }
+			label { display: flex; gap: 8px }
+		</style>
+		<main><section class="block-form-cta">
+			<select><option value="">Select one</option><option>Landscape Maintenance</option></select>
+			<label><input type="checkbox"> I have read the <a href="#">Terms</a> <a href="#">Privacy Policy</a>.<span hidden>Hidden help</span></label>
+			<select multiple size="2"><option>North</option><option>South</option></select>
+		</section></main>` );
+		const [ section ] = await evaluateWithSections( page, extractPageBoxes, DEFAULT_CONFIG );
+		const texts = section.boxes.filter( ( b ) => 'text' === b.type ).map( ( b ) => b.text );
+		assert.deepEqual( texts.slice( 0, 2 ), [ 'Select one', 'I have read the Terms Privacy Policy.' ], JSON.stringify( texts ) );
+		const label = section.boxes.find( ( b ) => b.text?.startsWith( 'I have read' ) );
+		assert.equal( label.h, 24, 'measured by its line box, as other text' );
+		const select = section.boxes.find( ( b ) => 'Select one' === b.text );
+		assert.ok( select.x >= 12 && select.w < 150, `the shown option's words, inside the padding: ${ JSON.stringify( select ) }` );
+		assert.equal( select.style.case, 'sentence', 'its case is the shown option\'s' );
+	} finally {
+		await browser.close();
+	}
+} );

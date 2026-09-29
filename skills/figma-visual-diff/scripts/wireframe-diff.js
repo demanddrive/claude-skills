@@ -30,6 +30,7 @@ const { PNG } = await loadDeps();
 const DEFAULTS = {
 	threshold: 0.85,
 	tolerance: 8,
+	sizeTolerance: 3,
 	viewportHeight: 900,
 };
 
@@ -38,7 +39,7 @@ const COLORS = { figma: [ 230, 40, 40 ], page: [ 30, 90, 230 ] };
 function parseArgs( argv ) {
 	const args = parseFlags( argv, {
 		defaults: DEFAULTS,
-		numbers: [ 'width', 'threshold', 'tolerance', 'viewportHeight' ],
+		numbers: [ 'width', 'threshold', 'tolerance', 'sizeTolerance', 'viewportHeight' ],
 		required: [ 'url', 'width', 'out', 'figma' ],
 	} );
 	// --mask/--live override the project config; sections whose copy comes from live posts
@@ -149,7 +150,7 @@ function compareSectionPair( args, i, fs0, ps, { masked, live } ) {
 		return { ...entry, status: 'masked', reason: 'dynamic content' };
 	}
 	const isLive = live.has( fs0.slug );
-	const a = analyseSection( fs0, ps, { tolerance: args.tolerance, live: isLive, width: args.width } );
+	const a = analyseSection( fs0, ps, { tolerance: args.tolerance, sizeTolerance: args.sizeTolerance, live: isLive, width: args.width } );
 	const file = sectionImage( i, fs0.slug );
 	fs.writeFileSync( path.join( args.out, file ), PNG.sync.write( renderOverlay( args.width, Math.max( fs0.height, ps.height ), a.match, fs0, ps ) ) );
 	const pass = a.score >= args.threshold && ! a.structural.length && ! a.copy.length && ! a.shifted.length;

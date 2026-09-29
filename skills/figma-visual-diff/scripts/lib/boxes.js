@@ -18,8 +18,23 @@ const MAX_MERGED_PARAGRAPHS = 12;
 /** Largest per-element offsets kept in a section's report. */
 export const MAX_OFFSETS = 12;
 
-/** 1 when an offset's width or height changed by more than `t`, the rule sectionDefects() applies. */
-const resizedBy = ( m, t ) => Number( Math.abs( m.dw ) > t || Math.abs( m.dh ) > t );
+/** Relative aspect-ratio change an image may show before it counts: whole-pixel rounding. */
+export const ASPECT_TOLERANCE = 0.02;
+/** How much an image's shape changed: its page aspect ratio over its Figma one, minus 1. */
+export const aspectChange = ( o ) => ( o.page.w / o.page.h ) / ( o.figma.w / o.figma.h ) - 1;
+
+/**
+ * Whether an offset's width or height changed past its tolerance, the rule sectionDefects()
+ * applies: `t` for text, whose box follows the font's metrics; `size` for any other box.
+ */
+const sizeChange = ( m ) => Math.max( Math.abs( m.dw ), Math.abs( m.dh ) );
+const resizedBy = ( m, t, size ) => {
+	// An image scaled to the same shape isn't a defect (see sectionDefects), so it isn't resized.
+	if ( 'image' === m.f.type && Math.abs( aspectChange( { figma: m.f, page: m.p } ) ) <= ASPECT_TOLERANCE ) {
+		return false;
+	}
+	return sizeChange( m ) > ( 'text' === m.f.type ? t : size );
+};
 
 /** Whether box `o` lies within box `b`, give or take 2px of rounding. */
 const inside = ( o, b ) => o.x >= b.x - 2 && o.y >= b.y - 2 && o.x + o.w <= b.x + b.w + 2 && o.y + o.h <= b.y + b.h + 2;
@@ -912,7 +927,7 @@ export function spacingDiffs( { fig, page, reliable, atEdges, sections, asElemen
  *   sideways shifts, overall drift, spacing, the largest per-element offsets and design tokens;
  *   and the sync points that line the section's rows up for the pixel diff.
  */
-export function analyseSection( figma, page, { tolerance: t, live, width } ) {
+export function analyseSection( figma, page, { tolerance: t, sizeTolerance = t, live, width } ) {
 	const fig = mergeFigmaRuns( figma.boxes, page.boxes );
 	const pageBoxes = mergeTextRuns( fig, page.boxes );
 	const matched = matchBoxes( fig, pageBoxes, t );
@@ -945,10 +960,14 @@ export function analyseSection( figma, page, { tolerance: t, live, width } ) {
 		.filter( ( m ) => inFigmaTemplate( m.f ) && ! ( 'text' === m.f.type && m.f.hash !== m.p.hash ) )
 		.filter( ( m ) => ! cutOff( m.f ) && ! cutOff( m.p ) )
 		.map( ( m ) => ( { ...m, dx: m.p.x - m.f.x, dy: m.p.y - m.f.y, dw: widthChange( m ), dh: m.p.h - m.f.h } ) )
-		.filter( ( m ) => Math.max( Math.abs( m.dx ), Math.abs( m.dy ), Math.abs( m.dw ), Math.abs( m.dh ) ) > t )
+		// Kept when it moved or resized; a box resized in place counts from its own tolerance.
+		.filter( ( m ) => Math.max( Math.abs( m.dx ), Math.abs( m.dy ), Math.abs( m.dw ), Math.abs( m.dh ) ) > t || resizedBy( m, t, sizeTolerance ) )
 		// Elements that changed size first: only they become defects, and what a resized element
 		// pushes down (moved, so overlapping least) would otherwise take the report's places.
-		.sort( ( a, b ) => ( resizedBy( b, t ) - resizedBy( a, t ) ) || ( a.overlap - b.overlap ) )
+		// Resized first, the largest change first (so a card twice as wide outranks inputs 4px
+		// taller); then what moved, least overlap first.
+		.sort( ( a, b ) => ( resizedBy( b, t, sizeTolerance ) - resizedBy( a, t, sizeTolerance ) )
+			|| ( resizedBy( a, t, sizeTolerance ) ? sizeChange( b ) - sizeChange( a ) : a.overlap - b.overlap ) )
 		.slice( 0, MAX_OFFSETS )
 		.map( ( m ) => ( {
 			figma: element( m.f ), page: element( m.p ), dx: m.dx, dy: m.dy, dw: m.dw, dh: m.dh,

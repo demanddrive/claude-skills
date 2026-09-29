@@ -244,3 +244,33 @@ export function readAnchors( file ) {
 	const report = file ? JSON.parse( fs.readFileSync( file, 'utf8' ) ) : { sections: [] };
 	return new Map( report.sections.filter( ( s ) => Array.isArray( s.anchors ) ).map( ( s ) => [ s.figmaY, s.anchors ] ) );
 }
+
+/**
+ * The loaded images a full-page screenshot drew as one flat colour: Chromium sometimes skips
+ * painting an image far down a long page, though the image is decoded and visible.
+ *
+ * @param {PNG}    png   Full-page screenshot.
+ * @param {Object} block Page section: its y and media (x, y, width, height, loaded).
+ * @return {Array} The media drawn blank.
+ */
+export function blankMedia( png, block ) {
+	return block.media.filter( ( m ) => m.loaded && m.width >= 40 && m.height >= 40 ).filter( ( m ) => {
+		const x0 = Math.max( 0, Math.round( m.x ) );
+		const y0 = Math.max( 0, Math.round( block.y + m.y ) );
+		const x1 = Math.min( png.width, Math.round( m.x + m.width ) );
+		const y1 = Math.min( png.height, Math.round( block.y + m.y + m.height ) );
+		const lo = [ 255, 255, 255 ];
+		const hi = [ 0, 0, 0 ];
+		for ( let y = y0; y < y1; y += 4 ) {
+			for ( let x = x0; x < x1; x += 4 ) {
+				const i = ( y * png.width + x ) * 4;
+				for ( let c = 0; c < 3; c++ ) {
+					lo[ c ] = Math.min( lo[ c ], png.data[ i + c ] );
+					hi[ c ] = Math.max( hi[ c ], png.data[ i + c ] );
+				}
+			}
+		}
+		// A photo spans far more than 8 levels in some channel; a skipped paint is one fill.
+		return x1 > x0 && y1 > y0 && hi.every( ( h, c ) => h - lo[ c ] <= 8 );
+	} );
+}

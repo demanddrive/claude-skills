@@ -290,6 +290,8 @@ export function extractPageBoxes( detect, cfg ) {
 		}
 		return style;
 	};
+	// Elements that only mark up words (a link, emphasis), inline wherever the layout puts them.
+	const PHRASING = /^(A|ABBR|B|BDI|BDO|CITE|CODE|DFN|EM|I|KBD|MARK|Q|S|SAMP|SMALL|SPAN|STRONG|SUB|SUP|TIME|U|VAR)$/i;
 	const inlineOnly = ( el ) => [ ...el.children ].every( ( c ) => 'BR' === c.tagName || getComputedStyle( c ).display.startsWith( 'inline' ) && ! /^(IMG|SVG|VIDEO|IFRAME)$/i.test( c.tagName ) );
 	// A pseudo-element has no box to read. So a stand-in with its computed style takes its
 	// place, the pseudo-element hidden meanwhile, and is measured: it lands wherever the layout
@@ -511,9 +513,11 @@ export function extractPageBoxes( detect, cfg ) {
 		const walk = ( el, isRoot, textDone = false, clip = null ) => {
 			owner = el;
 			const cs = getComputedStyle( el );
+			// Children whose text this element already emitted (see ownRun below).
+			const consumed = new Set();
 			const children = ( childClip ) => {
 				for ( const child of el.children ) {
-					walk( child, false, textDone, childClip );
+					walk( child, false, textDone || consumed.has( child ), childClip );
 				}
 			};
 			// `display: contents` draws no box of its own, only its children.
@@ -561,6 +565,52 @@ export function extractPageBoxes( detect, cfg ) {
 				push( 'surface', cut( r ), undefined, cs );
 			}
 			pseudoIcon( el, r, cut );
+			// A select draws its chosen option ("Select one"), which is no text node of its own.
+			// (A listbox, multiple or size > 1, draws its option rows, walked like any content.)
+			if ( 'SELECT' === tag && ! el.multiple && el.size <= 1 ) {
+				const option = el.selectedOptions[ 0 ];
+				const text = option?.label.trim();
+				if ( ! textDone && text ) {
+					// Its style is the shown option's, not every option's text together.
+					owner = option;
+					const font = document.createElement( 'canvas' ).getContext( '2d' );
+					font.font = cs.font;
+					const lineHeight = parseFloat( cs.lineHeight ) || parseFloat( cs.fontSize ) * 1.2;
+					const left = r.left + parseFloat( cs.borderLeftWidth ) + parseFloat( cs.paddingLeft );
+					push( 'text', cut( { left, top: r.top + ( r.height - lineHeight ) / 2, width: Math.min( font.measureText( text ).width, r.right - left ), height: lineHeight } ), text, cs );
+				}
+				return;
+			}
+			// Text of its own beside a box that isn't inline (a checkbox label: the input, then
+			// "I have read the <a>Privacy Policy</a>", in a flex row that makes every child a
+			// block): the words and the phrasing elements around them are one text.
+			const words = ( n ) => 3 === n.nodeType || ( 1 === n.nodeType && PHRASING.test( n.tagName ) && inlineOnly( n ) && n.checkVisibility( { opacityProperty: true, visibilityProperty: true } ) );
+			const ownRun = ! textDone && ! inlineOnly( el ) && [ ...el.childNodes ].some( ( n ) => 3 === n.nodeType && n.textContent.trim() )
+				? [ ...el.childNodes ].filter( ( n ) => words( n ) && n.textContent.trim() )
+				: [];
+			if ( ownRun.length ) {
+				// Line boxes, as the inline-text path below measures them.
+				const lineHeight = parseFloat( cs.lineHeight );
+				const rects = ownRun.flatMap( ( n ) => {
+					const part = document.createRange();
+					part.selectNodeContents( n );
+					return [ ...part.getClientRects() ];
+				} ).filter( ( q ) => q.width > 0 && q.height > 0 ).map( ( q ) => {
+					const grow = lineHeight > q.height ? ( lineHeight - q.height ) / 2 : 0;
+					return { left: q.left, right: q.right, top: q.top - grow, bottom: q.bottom + grow };
+				} );
+				if ( rects.length ) {
+					const left = Math.min( ...rects.map( ( q ) => q.left ) );
+					const top = Math.min( ...rects.map( ( q ) => q.top ) );
+					// The spaces between the parts are drawn too ("Terms <a>…</a> <a>…</a>").
+					const nodes = [ ...el.childNodes ];
+					const span = nodes.slice( nodes.indexOf( ownRun[ 0 ] ), nodes.indexOf( ownRun[ ownRun.length - 1 ] ) + 1 ).filter( words );
+					const text = span.map( ( n ) => n.textContent ).join( '' ).replace( /\s+/g, ' ' ).trim();
+					const first = 3 === ownRun[ 0 ].nodeType ? el : ownRun[ 0 ];
+					push( 'text', cut( { left, top, width: Math.max( ...rects.map( ( q ) => q.right ) ) - left, height: Math.max( ...rects.map( ( q ) => q.bottom ) ) - top } ), text, cs, getComputedStyle( first ), r );
+					ownRun.filter( ( n ) => 1 === n.nodeType ).forEach( ( n ) => consumed.add( n ) );
+				}
+			}
 			if ( ! textDone && el.textContent.trim() && inlineOnly( el ) ) {
 				const range = document.createRange();
 				range.selectNodeContents( el );
@@ -606,7 +656,10 @@ export function sectionMedia( detect, cfg ) {
 		const rect = el.getBoundingClientRect();
 		const media = [ ...el.querySelectorAll( 'img, video, iframe, picture' ) ].map( ( m ) => {
 			const r = m.getBoundingClientRect();
-			return { x: r.left, y: r.top - rect.top, width: r.width, height: r.height };
+			// Loaded and shown as far as the page knows (a slider's other slides sit at opacity
+			// 0), so the screenshot should draw it.
+			const loaded = 'IMG' === m.tagName && m.complete && m.naturalWidth > 0 && m.checkVisibility( { opacityProperty: true, visibilityProperty: true } );
+			return { x: r.left, y: r.top - rect.top, width: r.width, height: r.height, loaded };
 		} ).filter( ( r ) => r.width > 0 && r.height > 0 );
 		return { slug, y: rect.top + window.scrollY, height: rect.height, media };
 	} );

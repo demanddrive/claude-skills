@@ -8,6 +8,8 @@
  *   node tests/replay.js --scripts <scripts dir> --out <dir> <run dir or corpus root>...
  *       Replays every run found under the paths with that code; writes <out>/<run>.json and
  *       prints how many sections reproduce the run's own triage.json.
+ *       --set <name>=<value> (repeatable) changes one threshold for the replay: a triage default
+ *       (heightTolerance=16), or wireframe-diff's own with a wf. prefix (wf.tolerance=6).
  *   node tests/replay.js --diff <before out> <after out>
  *       Lists, per section, the defects the second replay removed, added or changed.
  *
@@ -65,8 +67,10 @@ const runName = ( run ) => run.split( path.sep ).slice( -5 ).join( '__' );
  * One run through the given code: its wireframe diff from the stored page, then triage's
  * defect rules with the stored pixel scores.
  */
-async function replayRun( run, scripts, triage, tmp ) {
+async function replayRun( run, scripts, triage, tmp, sets = {} ) {
 	const stored = JSON.parse( fs.readFileSync( path.join( run, 'triage.json' ), 'utf8' ) );
+	// Triage's thresholds, and the ones it hands wireframe-diff, as a live run would.
+	const args = { ...triage.DEFAULTS, ...Object.fromEntries( Object.entries( sets ).filter( ( [ k ] ) => ! k.startsWith( 'wf.' ) ).map( ( [ k, v ] ) => [ k, Number( v ) ] ) ) };
 	const out = fs.mkdtempSync( path.join( tmp, 'run-' ) );
 	const config = configFor( run );
 	const argv = [
@@ -74,8 +78,10 @@ async function replayRun( run, scripts, triage, tmp ) {
 		'--url', stored.url, '--width', String( stored.width ), '--out', out,
 		'--figma', path.join( path.dirname( run ), 'figma-boxes.txt' ),
 		'--page-boxes', path.join( run, 'wireframe', 'page-boxes.json' ),
-		'--threshold', String( triage.DEFAULTS.wireframeThreshold ),
+		'--threshold', String( args.wireframeThreshold ),
+		...( undefined !== args.sizeTolerance ? [ '--size-tolerance', String( args.sizeTolerance ) ] : [] ),
 		...( config ? [ '--config', config ] : [] ),
+		...Object.entries( sets ).filter( ( [ k ] ) => k.startsWith( 'wf.' ) ).flatMap( ( [ k, v ] ) => [ `--${ k.slice( 3 ).replace( /[A-Z]/g, ( c ) => `-${ c.toLowerCase() }` ) }`, v ] ),
 	];
 	try {
 		execFileSync( process.execPath, argv, { stdio: 'pipe' } );
@@ -88,18 +94,22 @@ async function replayRun( run, scripts, triage, tmp ) {
 	const wireframe = JSON.parse( fs.readFileSync( path.join( out, 'report.json' ), 'utf8' ) );
 	const pixelFile = path.join( run, 'pixel', 'report.json' );
 	const pixelOf = triage.sameSection( fs.existsSync( pixelFile ) ? JSON.parse( fs.readFileSync( pixelFile, 'utf8' ) ).sections : [] );
-	const sections = wireframe.sections.map( ( w ) => triage.triageSection( w, pixelOf( w ), triage.DEFAULTS ) );
+	const sections = wireframe.sections.map( ( w ) => triage.triageSection( w, pixelOf( w ), args ) );
 	return { run, config, replayed: sectionDefects( sections ), stored: sectionDefects( stored.sections ) };
 }
 
-async function replay( scripts, outDir, roots ) {
+async function replay( scripts, outDir, roots, sets = {} ) {
 	const triage = await import( pathToFileURL( path.join( path.resolve( scripts ), 'triage.js' ) ) );
+	const unknown = Object.keys( sets ).filter( ( k ) => ! k.startsWith( 'wf.' ) && ! ( k in triage.DEFAULTS ) );
+	if ( unknown.length ) {
+		throw new Error( `--set: no triage threshold named ${ unknown.join( ', ' ) } (known: ${ Object.keys( triage.DEFAULTS ).join( ', ' ) })` );
+	}
 	const tmp = fs.mkdtempSync( path.join( os.tmpdir(), 'replay-' ) );
 	fs.mkdirSync( outDir, { recursive: true } );
 	let sections = 0;
 	let same = 0;
 	for ( const run of findRuns( roots ) ) {
-		const r = await replayRun( run, path.resolve( scripts ), triage, tmp );
+		const r = await replayRun( run, path.resolve( scripts ), triage, tmp, sets );
 		fs.writeFileSync( path.join( outDir, `${ runName( run ) }.json` ), JSON.stringify( r, null, '\t' ) );
 		const keys = Object.keys( r.stored );
 		const matching = keys.filter( ( k ) => JSON.stringify( r.stored[ k ] ) === JSON.stringify( r.replayed[ k ] ) ).length;
@@ -163,11 +173,19 @@ async function main( argv ) {
 		return diff( argv[ 1 ], argv[ 2 ] );
 	}
 	const flag = ( name ) => argv[ argv.indexOf( name ) + 1 ];
+	const sets = Object.fromEntries( argv.filter( ( a, i ) => '--set' === argv[ i - 1 ] ).map( ( kv ) => {
+		// A typo would replay with the default, or NaN, and read as the change removing defects.
+		const [ name, value, extra ] = kv.split( '=' );
+		if ( undefined !== extra || ! /^(wf\.)?[a-zA-Z]+$/.test( name ?? '' ) || ! Number.isFinite( Number( value ) ) || '' === value ) {
+			throw new Error( `--set ${ kv }: expected <name>=<number>` );
+		}
+		return [ name, value ];
+	} ) );
 	const roots = argv.filter( ( a, i ) => ! a.startsWith( '--' ) && ! argv[ i - 1 ]?.startsWith( '--' ) );
 	if ( ! argv.includes( '--scripts' ) || ! argv.includes( '--out' ) || ! roots.length ) {
 		throw new Error( 'usage: replay.js --scripts <dir> --out <dir> <run dir or corpus root>... | --diff <before> <after>' );
 	}
-	return replay( flag( '--scripts' ), flag( '--out' ), roots );
+	return replay( flag( '--scripts' ), flag( '--out' ), roots, sets );
 }
 
 if ( isMain( import.meta.url ) ) {

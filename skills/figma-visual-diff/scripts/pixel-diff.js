@@ -27,7 +27,7 @@ import { isMain, listOption, parseFlags, pct, sectionImage, signedPx } from './l
 import { figmaSlug, parseFigma, tileSections } from './lib/figma.js';
 import { evaluateWithSections, sectionMedia } from './lib/page.js';
 import { alignRows } from './lib/align.js';
-import { compareSection, readAnchors, renderScale, sectionRows } from './lib/pixels.js';
+import { blankMedia, compareSection, readAnchors, renderScale, sectionRows } from './lib/pixels.js';
 import { crop, sideBySide } from './lib/png.js';
 
 const { PNG } = await loadDeps();
@@ -116,8 +116,10 @@ function compareSectionPair( args, figma, page, i, j, { masked, anchors } ) {
 	const file = sectionImage( i, fs0.slug );
 	fs.writeFileSync( path.join( args.out, file ), PNG.sync.write( sideBySide( [ best.a, best.b, best.diff ] ) ) );
 	const pass = best.score >= args.threshold && Math.abs( heightDelta ) <= args.heightTolerance;
+	const blank = blankMedia( page.png, block ).length;
 	return {
 		...entry,
+		...( blank ? { blankMedia: blank } : {} ),
 		status: pass ? 'pass' : 'fail',
 		score: Number( best.score.toFixed( 4 ) ),
 		areaScore: Number( best.areaScore.toFixed( 4 ) ),
@@ -162,7 +164,9 @@ async function main() {
 	const compared = results.filter( ( r ) => undefined !== r.score );
 	const area = compared.reduce( ( sum, r ) => sum + Math.min( r.figmaHeight, r.pageHeight ), 0 );
 	const pageScore = area ? compared.reduce( ( sum, r ) => sum + r.score * Math.min( r.figmaHeight, r.pageHeight ), 0 ) / area : 0;
+	const blank = results.filter( ( r ) => r.blankMedia );
 	const report = {
+		warnings: blank.map( ( r ) => `Section #${ r.index } ${ r.slug }: ${ r.blankMedia } loaded image(s) came out blank in the page screenshot, so its pixel score compares against a blank area. Check that section's page image by eye.` ),
 		url: args.url,
 		width: args.width,
 		threshold: args.threshold,

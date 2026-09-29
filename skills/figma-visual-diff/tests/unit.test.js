@@ -23,7 +23,7 @@ import { cacheBusted } from '../scripts/lib/browser.js';
 import { tokenValue } from '../scripts/lib/defects.js';
 import { parseFlags, sectionImage } from '../scripts/lib/cli.js';
 import { extractBoxes, figmaScript, figmaSlug, hash, normText, parseFigma, TEXT_PREFIX, tileSections } from '../scripts/lib/figma.js';
-import { compareSection, mediaMask, readAnchors, REFINE, renderScale } from '../scripts/lib/pixels.js';
+import { blankMedia, compareSection, mediaMask, readAnchors, REFINE, renderScale } from '../scripts/lib/pixels.js';
 import { alignedBox, alignedHeight, alignedRow, alignRows, anchorPoints, BAND_TOLERANCE, rowSources } from '../scripts/lib/align.js';
 
 /** The Figma extractor with the default ignore pattern, as figma-rest.js runs it. */
@@ -1161,6 +1161,25 @@ test( 'live sections check text styles as a set; other sections pair by element'
 	assert.deepEqual( analyseSection( figma, page, opts( false ) ).styles.map( ( d ) => d.property ), [ 'size', 'weight' ], 'otherwise: this element differs' );
 } );
 
+test( 'a box a few px off is resized, text only past the font tolerance, in a section that passes too', () => {
+	const offset = ( f, p ) => ( { figma: f, page: p, dx: p.x - f.x, dy: 0, dw: p.w - f.w, dh: p.h - f.h } );
+	const input = { type: 'surface', x: 0, y: 0, w: 303, h: 48 };
+	const label = { type: 'text', x: 0, y: 60, w: 47, h: 27, text: 'email *' };
+	const issues = ( offsets, over = {} ) => triageSection( wireframeSection( { status: 'pass', offsets, ...over } ), null, DEFAULTS ).defects.map( ( d ) => d.issue );
+	assert.deepEqual( issues( [ offset( input, { ...input, h: 52 } ) ] ), [ 'resized' ], 'an input 4px taller, though the section passes' );
+	assert.deepEqual( issues( [ offset( input, { ...input, h: 51 } ) ] ), [], '3px is within sizeTolerance' );
+	assert.deepEqual( issues( [ offset( label, { ...label, w: 52 } ) ] ), [], 'a label 5px wider is the font drawing it' );
+	assert.deepEqual( issues( [], { figmaHeight: 250, pageHeight: 226, heightDelta: -24 } ), [ 'height' ], 'a section 24px short' );
+	assert.deepEqual( issues( [], { figmaHeight: 250, pageHeight: 234, heightDelta: -16 } ), [], '16px is within heightTolerance' );
+	// End to end: an input 4px taller where it stands survives analyseSection's offsets too.
+	const w = analyseSection( { height: 200, boxes: [ input ] }, { height: 200, boxes: [ { ...input, h: 52 } ] }, { tolerance: 8, sizeTolerance: 3, live: false, width: 1440 } );
+	assert.deepEqual( issues( w.offsets ), [ 'resized' ], 'resized in place, not moved' );
+	// Images scaled to the same shape aren't defects, so they can't crowd out that input.
+	const logos = Array.from( { length: MAX_OFFSETS }, ( _, i ) => ( { type: 'image', x: i * 100, y: 100, w: 80, h: 40 } ) );
+	const g = analyseSection( { height: 200, boxes: [ input, ...logos ] }, { height: 200, boxes: [ { ...input, h: 52 }, ...logos.map( ( l ) => ( { ...l, w: 96, h: 48 } ) ) ] }, { tolerance: 8, sizeTolerance: 3, live: false, width: 1440 } );
+	assert.ok( g.offsets.some( ( o ) => 'surface' === o.figma.type ), 'the input keeps its place among the offsets' );
+} );
+
 test( 'an image may be any size; only a different aspect ratio is a defect', () => {
 	const image = ( w, h ) => ( { type: 'image', x: 68, y: 0, w, h } );
 	const offset = ( f, p ) => ( { figma: f, page: p, dx: p.x - f.x, dy: 0, dw: p.w - f.w, dh: p.h - f.h } );
@@ -1741,4 +1760,20 @@ test( 'figma-boxes.txt carries a text\'s layout box; files from before it have n
 	assert.deepEqual( [ withBox.lx, withBox.lw, withBox.clipped ], [ 20, 335, undefined ] );
 	assert.deepEqual( [ older.lx, older.lw ], [ undefined, undefined ] );
 	fs.rmSync( dir, { recursive: true } );
+} );
+
+test( 'a loaded image the screenshot drew as one flat colour is flagged blank', async () => {
+	const { PNG } = await loadDeps();
+	const png = new PNG( { width: 200, height: 300 } );
+	png.data.fill( 255 );
+	// A photo at y 50–150 (section at y 20): noise; the one at 160–260 left white.
+	for ( let y = 70; y < 170; y++ ) {
+		for ( let x = 0; x < 100; x++ ) {
+			const i = ( y * 200 + x ) * 4;
+			png.data[ i ] = ( x * 7 + y * 3 ) % 256;
+		}
+	}
+	const img = ( y, loaded = true ) => ( { x: 0, y, width: 100, height: 100, loaded } );
+	const block = { y: 20, media: [ img( 50 ), img( 150 ), img( 150, false ) ] };
+	assert.deepEqual( blankMedia( png, block ), [ img( 150 ) ], 'the drawn photo passes; an unloaded one isn\'t the capture\'s fault' );
 } );
