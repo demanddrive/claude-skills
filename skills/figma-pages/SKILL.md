@@ -30,6 +30,7 @@ questions now and pass the answers down:
   pages found to replace.
 - **Live site**: pages are published so the diff can load them; on a live site, get the
   go-ahead.
+- **Forms**: Formidable, unless the user gave HubSpot portal and form ids.
 
 Done when every link belongs to a named page, the target site is settled, and every existing
 page has a replace-or-preview answer.
@@ -41,8 +42,9 @@ time (more pages go in a second wave). Give each agent this prompt, filled in:
 
 > Build the page "<page name>" with the figma-page skill from `<its links>`, on
 > the site behind the `<server name>` MCP server. Existing page: <replace post <id> | write a
-> `Figma Preview:` page | none>. The user can't be asked: where the skill says to ask, take
-> the best fit and list it under "Needs a decision". End with the report the skill describes.
+> `Figma Preview:` page | none>. Forms: <Formidable | HubSpot portal <id>, form <id>>. The
+> user can't be asked: where the skill says to ask, take the best fit and list it under
+> "Needs a decision". End with the report the skill describes.
 
 Done when every page has an agent running.
 
