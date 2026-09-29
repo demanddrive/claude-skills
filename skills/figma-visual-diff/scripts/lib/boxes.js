@@ -18,6 +18,9 @@ const MAX_MERGED_PARAGRAPHS = 12;
 /** Largest per-element offsets kept in a section's report. */
 export const MAX_OFFSETS = 12;
 
+/** 1 when an offset's width or height changed by more than `t`, the rule sectionDefects() applies. */
+const resizedBy = ( m, t ) => Number( Math.abs( m.dw ) > t || Math.abs( m.dh ) > t );
+
 /** Whether box `o` lies within box `b`, give or take 2px of rounding. */
 const inside = ( o, b ) => o.x >= b.x - 2 && o.y >= b.y - 2 && o.x + o.w <= b.x + b.w + 2 && o.y + o.h <= b.y + b.h + 2;
 
@@ -943,7 +946,9 @@ export function analyseSection( figma, page, { tolerance: t, live, width } ) {
 		.filter( ( m ) => ! cutOff( m.f ) && ! cutOff( m.p ) )
 		.map( ( m ) => ( { ...m, dx: m.p.x - m.f.x, dy: m.p.y - m.f.y, dw: widthChange( m ), dh: m.p.h - m.f.h } ) )
 		.filter( ( m ) => Math.max( Math.abs( m.dx ), Math.abs( m.dy ), Math.abs( m.dw ), Math.abs( m.dh ) ) > t )
-		.sort( ( a, b ) => ( a.overlap - b.overlap ) )
+		// Elements that changed size first: only they become defects, and what a resized element
+		// pushes down (moved, so overlapping least) would otherwise take the report's places.
+		.sort( ( a, b ) => ( resizedBy( b, t ) - resizedBy( a, t ) ) || ( a.overlap - b.overlap ) )
 		.slice( 0, MAX_OFFSETS )
 		.map( ( m ) => ( {
 			figma: element( m.f ), page: element( m.p ), dx: m.dx, dy: m.dy, dw: m.dw, dh: m.dh,

@@ -8,7 +8,8 @@
  * Usage:
  *   node wireframe-diff.js --url <page-url> --width <1440|375> --out <dir> --figma <figma-boxes.txt>
  *
- * figma-boxes.txt comes from the Figma extractor (see lib/figma.js).
+ * figma-boxes.txt comes from the Figma extractor (see lib/figma.js). --page-boxes <file>
+ * compares a page an earlier run captured (its page-boxes.json) instead of loading --url.
  * Writes <out>/report.json and <out>/<n>-<slug>.png (Figma red, page blue) per section;
  * exits 1 when structure fails or a compared section is below threshold.
  */
@@ -54,6 +55,26 @@ function parseArgs( argv ) {
  * @param {Object} args Parsed arguments.
  * @return {Promise<Array>} Page sections.
  */
+/**
+ * A page captured by an earlier run (its page-boxes.json), in place of loading the page.
+ * Captures from before replay existed kept only each text's first TEXT_PREFIX characters and
+ * no lines or second-viewport heights, so they replay close to, not exactly as, their run.
+ *
+ * @param {string} file page-boxes.json path.
+ * @return {Array} Page sections.
+ */
+function readPageBoxes( file ) {
+	const sections = JSON.parse( fs.readFileSync( file, 'utf8' ) );
+	for ( const s of sections ) {
+		for ( const b of s.boxes ) {
+			if ( undefined !== b.text && undefined === b.full ) {
+				b.full = b.text;
+			}
+		}
+	}
+	return sections;
+}
+
 async function capturePage( args ) {
 	const sections = await withLoadedPage( args, ( page ) => measureTwice( page, args.config ) );
 	for ( const s of sections ) {
@@ -183,10 +204,10 @@ async function main() {
 		s.boxes = uniqueBoxes( s.boxes );
 	}
 	const lists = { masked: listOption( args.mask ), live: listOption( args.live ) };
-	const page = await capturePage( args );
-	// What the page extraction saw, for debugging a comparison; `full` text stays out.
-	const pageBoxes = page.map( ( s ) => ( { slug: s.slug, y: Math.round( s.y ), height: Math.round( s.height ), boxes: s.boxes.map( ( { full, ...b } ) => b ) } ) );
-	fs.writeFileSync( path.join( args.out, 'page-boxes.json' ), JSON.stringify( pageBoxes, null, '\t' ) );
+	const page = args.pageBoxes ? readPageBoxes( args.pageBoxes ) : await capturePage( args );
+	// Everything the comparison reads from the page, so a run can be replayed offline with
+	// --page-boxes (tests/replay.js) when the comparison changes.
+	fs.writeFileSync( path.join( args.out, 'page-boxes.json' ), JSON.stringify( page, null, '\t' ) );
 
 	const { pairs, byOrder, missing, extra, moved } = pairStructure( figma.sections, page );
 	const warnings = byOrder ? [ 'Section names did not match Figma, so sections were paired by position. Set sectionMap or slugPatterns in .figma-visual-diff.json.' ] : [];

@@ -1161,6 +1161,27 @@ test( 'an image may be any size; only a different aspect ratio is a defect', () 
 const words = ( x, y, w, h, t, extra = {} ) => ( { type: 'text', x, y, w, h, text: normText( t ).slice( 0, TEXT_PREFIX ), hash: hash( normText( t ) ), full: normText( t ), ...extra } );
 const analyse = ( fig, pg, opts = {} ) => analyseSection( { height: opts.fh ?? 400, boxes: fig }, { height: opts.ph ?? 400, boxes: pg }, { tolerance: 8, live: false, width: opts.width ?? 1440 } );
 
+test( 'an image grid in another shape is reported even when what it pushed up fills the offsets', () => {
+	// About's team grid: 1:1 photos in Figma, 3:2 on the page, so each card's name and role sit
+	// 97px higher and the second row's cards 194px. The moved text overlaps Figma's least, so
+	// it outranked the photos for the offsets the report keeps.
+	const card = ( x, row, imageH ) => {
+		const top = row * ( imageH + 159 );
+		return [
+			{ type: 'image', x, y: top, w: 289, h: imageH },
+			words( x, top + imageH + 26, 199, 36, `name ${ x } ${ row }` ),
+			words( x, top + imageH + 76, 141, 36, `role ${ x } ${ row }` ),
+		];
+	};
+	const grid = ( imageH ) => [ 69, 407, 744, 1082 ].flatMap( ( x ) => [ ...card( x, 0, imageH ), ...card( x, 1, imageH ) ] );
+	const w = analyseSection( { height: 953, boxes: grid( 290 ) }, { height: 762, boxes: grid( 193 ) }, { tolerance: 8, live: false, width: 1440 } );
+	const section = wireframeSection( { status: 'fail', score: w.score, drift: w.drift, offsets: w.offsets, spacing: w.spacing, figmaHeight: 953, pageHeight: 762, heightDelta: -191 } );
+	const defects = triageSection( section, null, DEFAULTS ).defects;
+	const aspect = defects.filter( ( d ) => 'aspect' === d.issue );
+	assert.ok( aspect.length, `an aspect defect names the cause, not just the height: ${ defects.map( ( d ) => d.issue ) }` );
+	assert.deepEqual( aspect[ 0 ].ratio, { figma: 1, page: 1.5 } );
+} );
+
 test( 'a label and its asterisk, two Figma layers, pair with the page\'s one "Email *"', () => {
 	const figma = [ words( 745, 352, 39, 27, 'Email' ), words( 786, 352, 6, 27, '*' ) ];
 	const merged = mergeFigmaRuns( figma, [ words( 745, 352, 50, 27, 'Email *' ) ] );
