@@ -10,6 +10,51 @@ instead of reinventing the process each time.
 | Skill | What it does |
 |-------|--------------|
 | [`redirect-sheet-creator`](skills/redirect-sheet-creator/) | Builds a 301 redirect sheet mapping a production sitemap onto a new/staging site for a migration — exact + semantic matching, loop/chain validation, Excel workbook output. |
+| [`figma-pages`](skills/figma-pages/) | `/figma-pages <link> <link> …`: builds several pages at once, one agent per Figma link, and merges their reports into one developer task list. |
+| [`figma-page`](skills/figma-page/) | Builds a WordPress page from a Figma frame out of the site's existing blocks via the site's MCP server, diffs it with figma-visual-diff and fixes its content. Code defects are left for a developer. |
+| [`figma-block`](skills/figma-block/) | Codes a new block from a Figma section, puts it on a demo page via the site's MCP server, and scores the build with figma-visual-diff. Functionality still needs manual review. |
+| [`figma-visual-diff`](skills/figma-visual-diff/) | Compares a built page against its Figma frame per breakpoint and triages every section (structure, content, alignment, layout, visual) with a wireframe diff and a pixel diff. |
+| [`wp-update`](skills/wp-update/) | Changes content on a live WordPress site through the mcp-server plugin's MCP tools: pages and posts, menus, ACF fields, site settings, media and Formidable forms. |
+
+## Installing as a plugin
+
+The repo is also a Claude Code plugin marketplace, so the skills can be installed once and
+used in every project, and updated in place:
+
+```text
+/plugin marketplace add git@github.com:demanddrive/claude-skills.git
+/plugin install dd@demanddrive
+```
+
+Or from a shell:
+
+```bash
+claude plugin marketplace add git@github.com:demanddrive/claude-skills.git
+claude plugin install dd@demanddrive
+```
+
+The marketplace is cloned over SSH with your own git credentials, so it works while the repo
+is private. If your GitHub access goes through an SSH host alias, swap in that host, e.g.
+`git@workgit:demanddrive/claude-skills.git`.
+
+Update with `/plugin marketplace update demanddrive`. Installed skills are namespaced, e.g.
+`/dd:figma-visual-diff`.
+
+To have a project offer the skills to everyone who opens it, add to its `.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "demanddrive": {
+      "source": { "source": "git", "url": "git@github.com:demanddrive/claude-skills.git" }
+    }
+  },
+  "enabledPlugins": { "dd@demanddrive": true }
+}
+```
+
+Node dependencies (root `package.json`) install automatically with the plugin. When a skill
+changes, bump `version` in `.claude-plugin/plugin.json` so installs pick it up.
 
 ## Using a skill
 
@@ -44,6 +89,10 @@ live in that skill's `SKILL.md`.
 ## Repo layout
 
 ```
+.claude-plugin/
+  plugin.json         # the repo as one plugin: every skill under skills/
+  marketplace.json    # the repo as a marketplace listing that plugin
+package.json          # Node dependencies for skills that need them
 skills/
   <skill-name>/
     SKILL.md          # the skill itself (instructions Claude follows)
@@ -71,5 +120,10 @@ like coverage.
 
 Keep `SKILL.md` to what the model must decide. Rules the script already enforces don't need
 restating there — that prose goes stale against the code and costs context on every run.
+
+Write and review skills against Matt Pocock's
+[`writing-for-agents`](https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-for-agents)
+skill: sharp descriptions, steps that end on a checkable "done when", reference moved into
+sibling files behind a pointer saying when to read it.
 
 > `redirect-sheet-creator` follows this pattern.

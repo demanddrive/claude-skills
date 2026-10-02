@@ -1,0 +1,7 @@
+F|1440|900
+S|0|Intro Copy / Desktop|0|300
+S|1|Content Cards (No Bg) / Desktop|300|600
+B|0|text|69|104|478|67|3e14376e|what sets us apart
+B|1|surface|69|0|85|85||
+B|1|icon|87|18|50|50||
+B|1|text|70|105|84|36|ac7bfc28|quality

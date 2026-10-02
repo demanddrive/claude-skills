@@ -1,0 +1,14 @@
+{
+	"name": "demanddrive",
+	"description": "The Demand Drive team's Claude Code plugins.",
+	"owner": {
+		"name": "Demand Drive"
+	},
+	"plugins": [
+		{
+			"name": "dd",
+			"source": "./",
+			"description": "The team's shared skills"
+		}
+	]
+}
