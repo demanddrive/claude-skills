@@ -14,6 +14,7 @@ instead of reinventing the process each time.
 | [`figma-page`](skills/figma-page/) | Builds a WordPress page from a Figma frame out of the site's existing blocks via the site's MCP server, diffs it with figma-visual-diff and fixes its content. Code defects are left for a developer. |
 | [`figma-block`](skills/figma-block/) | Codes a new block from a Figma section, puts it on a demo page via the site's MCP server, and scores the build with figma-visual-diff. Functionality still needs manual review. |
 | [`figma-visual-diff`](skills/figma-visual-diff/) | Compares a built page against its Figma frame per breakpoint and triages every section (structure, content, alignment, layout, visual) with a wireframe diff and a pixel diff. |
+| [`wp-update`](skills/wp-update/) | Changes content on a live WordPress site through the mcp-server plugin's MCP tools: pages and posts, menus, ACF fields, site settings, media and Formidable forms. |
 
 ## Installing as a plugin
 
@@ -21,23 +22,34 @@ The repo is also a Claude Code plugin marketplace, so the skills can be installe
 used in every project, and updated in place:
 
 ```text
-/plugin marketplace add demanddrive/claude-skills
-/plugin install demanddrive-skills@demanddrive
+/plugin marketplace add git@github.com:demanddrive/claude-skills.git
+/plugin install dd@demanddrive
 ```
 
+Or from a shell:
+
+```bash
+claude plugin marketplace add git@github.com:demanddrive/claude-skills.git
+claude plugin install dd@demanddrive
+```
+
+The marketplace is cloned over SSH with your own git credentials, so it works while the repo
+is private. If your GitHub access goes through an SSH host alias, swap in that host, e.g.
+`git@workgit:demanddrive/claude-skills.git`.
+
 Update with `/plugin marketplace update demanddrive`. Installed skills are namespaced, e.g.
-`/demanddrive-skills:figma-visual-diff`. If your GitHub access goes through an SSH host alias
-(e.g. `git@workgit:…`), add the marketplace by URL instead:
-`/plugin marketplace add git@workgit:demanddrive/claude-skills.git`.
+`/dd:figma-visual-diff`.
 
 To have a project offer the skills to everyone who opens it, add to its `.claude/settings.json`:
 
 ```json
 {
   "extraKnownMarketplaces": {
-    "demanddrive": { "source": { "source": "github", "repo": "demanddrive/claude-skills" } }
+    "demanddrive": {
+      "source": { "source": "git", "url": "git@github.com:demanddrive/claude-skills.git" }
+    }
   },
-  "enabledPlugins": { "demanddrive-skills@demanddrive": true }
+  "enabledPlugins": { "dd@demanddrive": true }
 }
 ```
 
