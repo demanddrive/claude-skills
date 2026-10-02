@@ -20,7 +20,7 @@ schema and its error messages are the contract for what a block accepts.
   missing: `claude mcp add --scope user --transport http figma https://mcp.figma.com/mcp`,
   then `/mcp`.
 - **The site's MCP server**: tools ending in `mcps-post-blocks`, `mcps-media-import`,
-  `mcps-post-search`, `mcps-form`. If missing, the site needs the mcp-server plugin and a connection:
+  `mcps-post-search`, `mcps-formidable-form`. If missing, the site needs the mcp-server plugin and a connection:
   `claude mcp add --transport http <name> https://<site>/wp-json/mcp/mcp`, then `/mcp`. If
   several sites are connected, confirm which one before writing.
 - **figma-visual-diff** for the check.
@@ -87,10 +87,10 @@ The server enforces structure; intent is yours:
 - **Forms**: read the fields from the design (labels, types, a dropdown's options, required
   marks, widths: two side by side are `half`) and the consent line, a required `checkbox`
   whose one option is its text, or `gdpr` when `discover` lists it. Write them with
-  `mcps-form` `action: "set"`, keyed by the form, not the page (`figma-contact`), so every
+  `mcps-formidable-form` `action: "set"`, keyed by the form, not the page (`figma-contact`), so every
   page showing that form shares it and a re-run updates it. Put the returned `form_id` in the
   block's `form` with `form_provider: formidable`.
-  HubSpot only with the user's portal and form ids. Without `mcps-form`, keep the block's
+  HubSpot only with the user's portal and form ids. Without `mcps-formidable-form`, keep the block's
   form and list it under "Needs a decision".
 
 Write with `mcps-post-blocks` `action: "set"`; each returned issue has a path and a code to fix
