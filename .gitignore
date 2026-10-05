@@ -7,6 +7,13 @@ feedback.json
 benchmark.json
 benchmark.md
 
+# figma-visual-diff runs outside a plugin install (screenshots, reports)
+skills/figma-visual-diff/runs/
+
+# Compiled artifacts
+node_modules/
+dist/
+
 # Python
 __pycache__/
 *.pyc
