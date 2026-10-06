@@ -322,7 +322,7 @@ async function main() {
 	}
 	await validateReport( report );
 	fs.writeFileSync( path.join( args.out, 'triage.json' ), JSON.stringify( report, null, '\t' ) );
-	fs.writeFileSync( path.join( args.out, 'report.html' ), renderReport( report, path.basename( args.out ) ) );
+	fs.writeFileSync( path.join( args.out, 'report.html' ), renderReport( report, path.basename( args.out ), args.out ) );
 	if ( args.runsDir ) {
 		appendHistory( args.runsDir, path.basename( args.out ), report );
 	}

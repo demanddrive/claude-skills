@@ -6,10 +6,13 @@
  * flag where they disagree. The pane on the right shows the selected defect: large Figma and
  * page crops around it, its values on both sides, and the whole section with it outlined. A
  * module row shows the module instead: Jev's answers, what Jev was shown, and the overlays.
- * triage.json stays the source of truth; this only presents it. The page sits in the run folder
- * and links the overlays relatively, and every pane is rendered here, so only navigation needs
- * the script.
+ * triage.json stays the source of truth; this only presents it. The page is complete on its own:
+ * the overlays are embedded, each once, so a copy of the file alone still shows everything, and
+ * every pane is rendered here, so only navigation needs the script.
  */
+
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { alignedBox } from './align.js';
 import { TOKEN_LABELS, tokenValue } from './defects.js';
@@ -134,12 +137,43 @@ function outline( b, sideName, x0, y0, w, h, cls = '' ) {
 	return `<span class="hl hl-${ sideName }${ b.ghost ? ' ghost' : '' }${ cls }" style="left:${ at( ( b.x - x0 ) / w ) }%;top:${ at( ( b.y - y0 ) / h ) }%;width:${ Math.max( 0.3, at( b.w / w ) ) }%;height:${ Math.max( 0.3, at( b.h / h ) ) }%"></span>`;
 }
 
-/** A background showing the cw×ch area at x, y of a size[0]×size[1] image, scaled to fill its box. */
+/**
+ * The overlay images a render refers to, by path in the run folder. Each becomes one CSS class
+ * holding the image once, however many crops cut from it; renderReport() resets the list and
+ * defines the classes. Classes, not custom properties: Chrome drops a custom property holding
+ * a multi-megabyte data URL, but keeps it in a class's background-image.
+ */
+const imageClasses = new Map();
+
+/** The class showing an image as its background. */
+function imageClass( src ) {
+	if ( ! imageClasses.has( src ) ) {
+		imageClasses.set( src, `i${ imageClasses.size }` );
+	}
+	return imageClasses.get( src );
+}
+
+/** The class definitions: each image as a data URL, or its relative path when it can't be read. */
+function imageStyles( dir ) {
+	// A CSS string, not HTML: entities aren't decoded inside <style>, and < must not close it.
+	const link = ( src ) => `url('${ String( src ).replace( /[\\'\n\r\f<>]/g, ( c ) => `\\${ c.charCodeAt( 0 ).toString( 16 ) } ` ) }')`;
+	const embed = ( src ) => {
+		try {
+			return `url(data:image/png;base64,${ fs.readFileSync( path.join( dir, src ) ).toString( 'base64' ) })`;
+		} catch {
+			return link( src );
+		}
+	};
+	const url = dir ? embed : link;
+	return [ ...imageClasses ].map( ( [ src, cls ] ) => `.${ cls }{background-image:${ url( src ) }}` ).join( '\n' );
+}
+
+/** The class and style showing the cw×ch area at x, y of a size[0]×size[1] image, scaled to fill its box. */
 function cut( src, size, x, y, cw, ch ) {
 	const [ iw, ih ] = size;
 	const posX = iw > cw ? x / ( iw - cw ) : 0;
 	const posY = ih > ch ? y / ( ih - ch ) : 0;
-	return `background-image:url('${ esc( src ) }');background-size:${ num( ( iw / cw ) * 100 ) }% auto;background-position:${ num( posX * 100 ) }% ${ num( posY * 100 ) }%`;
+	return { cls: imageClass( src ), style: `background-size:${ num( ( iw / cw ) * 100 ) }% auto;background-position:${ num( posX * 100 ) }% ${ num( posY * 100 ) }%` };
 }
 
 /**
@@ -148,8 +182,10 @@ function cut( src, size, x, y, cw, ch ) {
  * image lines both sides up row by row, so the same area of each panel is the same place.
  */
 function swipe( src, size, x0, y0, cw, ch, pageX, overlay, label, maxWidth ) {
+	const figma = cut( src, size, x0, y0, cw, ch );
+	const page = cut( src, size, pageX + x0, y0, cw, ch );
 	return `<div class="swipe" style="max-width:${ Math.round( maxWidth ) }px;aspect-ratio:${ num( cw ) }/${ num( ch ) }">
-		<span class="layer" style="${ cut( src, size, x0, y0, cw, ch ) }"></span><span class="layer page" style="${ cut( src, size, pageX + x0, y0, cw, ch ) }"></span>${ overlay }
+		<span class="layer ${ figma.cls }" style="${ figma.style }"></span><span class="layer page ${ page.cls }" style="${ page.style }"></span>${ overlay }
 		<span class="divider"></span><span class="side l">Figma</span><span class="side r">Page</span>
 		<input type="range" min="0" max="100" step="0.5" value="50" aria-label="${ esc( `Divider between Figma and page, ${ label }` ) }">
 	</div>`;
@@ -181,8 +217,9 @@ function crops( d, s, width ) {
 	const y0 = clamp( ( top + bottom - ch ) / 2, imageHeight - ch );
 	const size = [ imageWidth, imageHeight ];
 	const crop = ( panelX, label, figmaBox, pageBox ) => {
-		const style = `max-width:${ Math.round( cw * CROP.maxScale ) }px;aspect-ratio:${ num( cw ) }/${ num( ch ) };${ cut( src, size, panelX + x0, y0, cw, ch ) }`;
-		return `<figure class="crop"><figcaption>${ label }</figcaption><span class="view" role="img" aria-label="${ esc( `${ label } around ${ d.summary }` ) }" style="${ style }">${ outline( figmaBox, 'figma', x0, y0, cw, ch ) }${ outline( pageBox, 'page', x0, y0, cw, ch ) }</span></figure>`;
+		const view = cut( src, size, panelX + x0, y0, cw, ch );
+		const style = `max-width:${ Math.round( cw * CROP.maxScale ) }px;aspect-ratio:${ num( cw ) }/${ num( ch ) };${ view.style }`;
+		return `<figure class="crop"><figcaption>${ label }</figcaption><span class="view ${ view.cls }" role="img" aria-label="${ esc( `${ label } around ${ d.summary }` ) }" style="${ style }">${ outline( figmaBox, 'figma', x0, y0, cw, ch ) }${ outline( pageBox, 'page', x0, y0, cw, ch ) }</span></figure>`;
 	};
 	if ( ! pixel ) {
 		return `<div class="crops">${ crop( 0, 'Wireframe', where.figma, where.page ) }</div>`;
@@ -305,7 +342,7 @@ function figure( s, width, kind, overlay = '' ) {
 	const [ title, score, caption ] = 'pixel' === kind
 		? [ 'Pixels', s.pixelScore, 'Figma | page | diff' ]
 		: [ 'Wireframe', s.wireframeScore, 'Figma red, page blue; thick boxes are unmatched' ];
-	return `<figure class="${ kind }${ 'pixel' === kind ? ' mode-side' : '' }"><figcaption><strong>${ title }${ undefined === score ? '' : ` ${ pct( score ) }` }</strong> <span class="muted">${ caption }</span></figcaption><a class="frame" href="${ esc( src ) }"><img src="${ esc( src ) }" width="${ w }" height="${ h }" alt="${ title } comparison for ${ esc( s.slug ) }" loading="lazy">${ overlay }</a></figure>`;
+	return `<figure class="${ kind }${ 'pixel' === kind ? ' mode-side' : '' }"><figcaption><strong>${ title }${ undefined === score ? '' : ` ${ pct( score ) }` }</strong> <span class="muted">${ caption }</span></figcaption><span class="frame shot ${ imageClass( src ) }" role="img" aria-label="${ title } comparison for ${ esc( s.slug ) }" style="aspect-ratio:${ w }/${ h }">${ overlay }</span></figure>`;
 }
 
 /** The whole section as a swipe, when it has a pixel image; outlines in section px over it. */
@@ -550,9 +587,11 @@ function metricsSummary( report ) {
  *
  * @param {Object} report triage.json content.
  * @param {string} run    The run folder's name, shown as the date.
+ * @param {string} [dir]  The run folder, to embed its overlay images; without it they are linked.
  * @return {string} HTML.
  */
-export function renderReport( report, run ) {
+export function renderReport( report, run, dir = '' ) {
+	imageClasses.clear();
 	const sections = report.sections;
 	const width = report.width;
 	const structure = report.structure.length ? `<section class="card"><h2>Structure</h2><ul>${ report.structure.map( ( d ) => `<li><span class="id">${ esc( d.id ) }</span> ${ esc( d.summary ) }</li>` ).join( '' ) }</ul></section>` : '';
@@ -650,7 +689,7 @@ details summary { cursor: pointer; margin-top: 12px; color: var(--accent); }
 @media (min-width: 900px) { .images .wireframe { max-width: 50%; } }
 figure { margin: 0; }
 figcaption { margin-bottom: 6px; font-size: 13px; }
-figure img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.shot { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: #fff no-repeat; background-size: 100% auto; }
 body:not(.swipe-mode) .mode-swipe, body.swipe-mode .mode-side { display: none; }
 .pager [aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .copy-ticket { font: inherit; font-size: 13px; margin-left: auto; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 2px 12px; cursor: pointer; }
@@ -688,6 +727,7 @@ ${ structure }
 ${ panes }
 </main>
 </div>
+<style>${ imageStyles( dir ) }</style>
 <script>
 (${ navigation })();
 </script>

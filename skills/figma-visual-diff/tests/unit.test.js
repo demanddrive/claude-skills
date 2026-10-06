@@ -1016,9 +1016,20 @@ test( 'the review page shows each diagnosis with its evidence, escaped', async (
 		}
 	}
 	assert.ok( html.includes( 'data-filter="disagree"' ) );
+	assert.ok( html.includes( "url('wireframe/01-hero.png')" ), 'without the run folder, overlays are linked' );
+	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-report-' ) );
+	for ( const kind of [ 'wireframe', 'pixel' ] ) {
+		fs.mkdirSync( path.join( dir, kind ) );
+		fs.writeFileSync( path.join( dir, kind, '01-hero.png' ), `${ kind } bytes` );
+	}
+	const embedded = renderReport( report, '2026-09-25_120000', dir );
+	for ( const kind of [ 'wireframe', 'pixel' ] ) {
+		const dataUrl = `url(data:image/png;base64,${ Buffer.from( `${ kind } bytes` ).toString( 'base64' ) })`;
+		assert.equal( embedded.split( dataUrl ).length - 1, 1, `the ${ kind } overlay is embedded once, whatever cuts from it` );
+	}
+	assert.ok( ! embedded.includes( '01-hero.png' ), 'a complete report links no file of the run' );
 	assert.ok( html.includes( 'font size<div class="muted">text “who &lt;we&gt; work with”</div>' ), 'a style defect names its token and element' );
 	assert.ok( html.includes( '28px' ) && html.includes( '24px' ), 'with units' );
-	assert.ok( html.includes( 'src="wireframe/01-hero.png"' ), 'overlays link relative to the run folder' );
 } );
 
 test( 'a text layer alone in a vertically padded auto-layout frame takes its padding as margins; other text has none', () => {

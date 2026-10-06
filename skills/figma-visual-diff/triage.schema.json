@@ -352,7 +352,7 @@
 				"defects": { "type": "array", "items": { "$ref": "#/$defs/defect" } },
 				"diagnosis": { "$ref": "#/$defs/diagnosis" },
 				"images": {
-					"description": "Overlay images, relative to the run folder.",
+					"description": "Overlay images, relative to the run folder; report.html embeds them.",
 					"type": "object",
 					"additionalProperties": false,
 					"properties": {
