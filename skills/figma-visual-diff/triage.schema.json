@@ -156,7 +156,8 @@
 				"y": { "type": "number" },
 				"w": { "type": "number" },
 				"h": { "type": "number" },
-				"text": { "type": "string", "description": "A text box's copy, normalised and cut to its first 28 characters." }
+				"text": { "type": "string", "description": "A text box's copy, normalised and cut to its first 28 characters." },
+				"hash": { "type": "string", "description": "A hash of the text box's whole copy, which tells apart texts that read the same in `text`." }
 			}
 		},
 		"rect": {
@@ -202,17 +203,17 @@
 			"oneOf": [
 				{
 					"description": "A Figma element with no page counterpart.",
-					"properties": { "kind": { "const": "content" }, "issue": { "const": "missing" }, "figma": { "$ref": "#/$defs/element" } },
+					"properties": { "kind": { "const": "content" }, "issue": { "const": "missing" }, "figma": { "$ref": "#/$defs/element" }, "count": { "type": "integer", "minimum": 1, "description": "Elements alike (type, size, words) this one stands for." } },
 					"required": [ "figma" ]
 				},
 				{
 					"description": "A page element Figma doesn't have.",
-					"properties": { "kind": { "const": "content" }, "issue": { "const": "extra" }, "page": { "$ref": "#/$defs/element" } },
+					"properties": { "kind": { "const": "content" }, "issue": { "const": "extra" }, "page": { "$ref": "#/$defs/element" }, "count": { "type": "integer", "minimum": 1, "description": "Elements alike (type, size, words) this one stands for." } },
 					"required": [ "page" ]
 				},
 				{
 					"description": "Paired text boxes whose copy differs.",
-					"properties": { "kind": { "const": "content" }, "issue": { "const": "copy" }, "figma": { "$ref": "#/$defs/element" }, "page": { "$ref": "#/$defs/element" } },
+					"properties": { "kind": { "const": "content" }, "issue": { "const": "copy" }, "figma": { "$ref": "#/$defs/element" }, "page": { "$ref": "#/$defs/element" }, "count": { "type": "integer", "minimum": 1, "description": "Texts with the same words changed the same way that this one stands for." } },
 					"required": [ "figma", "page" ]
 				},
 				{

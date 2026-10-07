@@ -11,7 +11,10 @@ a missing logo, a changed heading and a short padding are three defects. Each de
 `id` (`<section>.<n>`), `kind`, `issue`, `owner`, a one-line `summary`, and the values on both
 sides: `figma` and `page` (an element box, or px for `height`/`spacing`) plus the `delta`.
 Element boxes are px at the breakpoint, relative to the top-left of the section on that side.
-Section-level `structure` defects list sections missing or out of order.
+Elements alike (the same type, size and words: every card's badge) that are all missing or
+all extra are one defect with a `count`, the first standing for the rest; so are texts whose
+words changed the same way ("brand name" → "charter" on every card). Section-level
+`structure` defects list sections missing or out of order.
 
 ## Copy
 
@@ -45,7 +48,10 @@ height, weight, text colour, letter spacing, italic, underline or strike-through
 letters are drawn in (upper, lower, title, sentence or mixed; Figma's text case and CSS
 `text-transform` applied, and none for under 3 letters), plus text alignment once text wraps.
 A text's style is the one on at least 60% of its letters, on both sides (a heading with one
-bold word is regular); where no value covers that much, that token isn't compared. Font names
+bold word is regular); where no value covers that much, that token isn't compared. Where a
+text's font size differs, a line height or letter spacing that keeps the same ratio to it on
+both sides (27.2px at 17px, 25.6px at 16px) follows from the size and isn't a defect of its
+own; one that doesn't is. Font names
 compare without case, spaces or a variable font's suffix. Texts from a Figma file extracted
 before this was read by runs keep their first character's style, compared with the page's
 first character's. Then a surface's fill, corner
@@ -96,8 +102,9 @@ inside it is the space to the section's edge.
 Elements that only moved aren't defects: they follow from something above changing size, and
 the overlays show them. An element of a different size is a `resized` defect in any section,
 even one that otherwise passes: over 8px for text (its box follows the font's metrics), over
-3px for any other box (an input, a button, a card). A section taller or shorter by over 16px is
-a `height` defect.
+3px for any other box (an input, a button, a card). A text whose font size differs (a `style`
+defect) isn't also `resized`: its box follows the size, unless it is wrapped text whose layout
+box changed (`textBox`). A section taller or shorter by over 16px is a `height` defect.
 
 Sliders are compared too: before measuring, the scripts interact once (so scripts delayed until
 interaction, e.g. by caching plugins, run), stop autoplay and park Swiper sliders on their

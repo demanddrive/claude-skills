@@ -512,8 +512,9 @@ export function paddingOf( boxes, width, height ) {
  * @return {{type: string, x: number, y: number, w: number, h: number, text?: string}}
  */
 export function element( b ) {
-	const { type, x, y, w, h, text } = b;
-	return 'text' === type ? { type, x, y, w, h, text } : { type, x, y, w, h };
+	const { type, x, y, w, h, text, hash } = b;
+	// The hash is of the whole copy; the text is its first characters, so two texts can share it.
+	return 'text' === type ? { type, x, y, w, h, text, ...( hash ? { hash } : {} ) } : { type, x, y, w, h };
 }
 
 /**

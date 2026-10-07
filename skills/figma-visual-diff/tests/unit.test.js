@@ -144,9 +144,69 @@ test( 'a sideways-shifted element is an alignment defect even when the section h
 test( 'every missing or extra element is its own defect, numbered within its section', () => {
 	const s = triageSection( wireframeSection( { missing: [ box( 'image', 540, 71, 160, 107 ), box( 'icon', 20, 20, 24, 24 ) ], extra: [ box( 'surface', 20, 817, 85, 85 ) ] } ), null, DEFAULTS );
 	assert.equal( s.verdict, 'content' );
-	assert.deepEqual( s.defects.map( ( d ) => [ d.id, d.issue, d.owner ] ), [ [ '3.1', 'missing', 'page' ], [ '3.2', 'missing', 'page' ], [ '3.3', 'extra', 'page' ] ] );
+	assert.deepEqual( s.defects.map( ( d ) => [ d.id, d.issue, d.owner, d.count ] ), [ [ '3.1', 'missing', 'page', 1 ], [ '3.2', 'missing', 'page', 1 ], [ '3.3', 'extra', 'page', 1 ] ] );
 	assert.deepEqual( s.defects[ 0 ].figma, box( 'image', 540, 71, 160, 107 ) );
 	assert.deepEqual( s.defects[ 2 ].page, box( 'surface', 20, 817, 85, 85 ) );
+} );
+
+test( 'tokens and a text box that follow a text\'s font size are its size defect, not their own', () => {
+	// shop-archive at 375: an h1 at 22px instead of 28px was a size, a line height and a resized defect.
+	const title = box( 'text', 21, 60, 253, 34, 'shop all products' );
+	const s = triageSection( wireframeSection( { styles: [
+		{ property: 'size', figma: '17', page: '16', element: title },
+		{ property: 'lh', figma: '27.2', page: '25.6', element: title }, // 1.6× the size on both sides
+		{ property: 'ls', figma: '1.7', page: '1.6', element: title }, // 0.1× the size on both sides
+	] } ), null, DEFAULTS );
+	assert.deepEqual( s.defects.map( ( d ) => d.summary ), [ 'text "shop all products": font size 17px in Figma, 16px on the page' ] );
+	const own = triageSection( wireframeSection( { styles: [
+		{ property: 'size', figma: '17', page: '16', element: title },
+		{ property: 'lh', figma: '27.2', page: '32', element: title },
+	] } ), null, DEFAULTS );
+	assert.equal( own.defects.length, 2, 'a line height that does not follow the size is its own defect' );
+	const sized = triageSection( wireframeSection( {
+		offsets: [ { figma: title, page: { ...title, w: 204, h: 28 }, dx: 0, dy: 0, dw: -49, dh: -6 } ],
+		styles: [ { property: 'size', figma: '28', page: '22', element: title } ],
+	} ), null, DEFAULTS );
+	assert.deepEqual( sized.defects.map( ( d ) => d.issue ), [ 'style' ], 'a text box that only changed with its font size is not resized on its own' );
+	const unsized = triageSection( wireframeSection( { offsets: [ { figma: title, page: { ...title, w: 204, h: 28 }, dx: 0, dy: 0, dw: -49, dh: -6 } ] } ), null, DEFAULTS );
+	assert.deepEqual( unsized.defects.map( ( d ) => d.issue ), [ 'resized' ] );
+	// Wrapped text carries its layout box either way; one that didn't change doesn't make the text its own defect.
+	const wrapped = ( textBox ) => triageSection( wireframeSection( {
+		offsets: [ { figma: title, page: { ...title, w: 204, h: 28 }, dx: 0, dy: 0, dw: -49, dh: -6, textBox } ],
+		styles: [ { property: 'size', figma: '28', page: '22', element: title } ],
+	} ), null, DEFAULTS ).defects.map( ( d ) => d.issue );
+	assert.deepEqual( wrapped( { figma: 584, page: 584 } ), [ 'style' ] );
+	assert.deepEqual( wrapped( { figma: 584, page: 500 } ), [ 'resized', 'style' ], 'a layout box that changed is' );
+	const otherwise = triageSection( wireframeSection( {
+		offsets: [ { figma: title, page: { ...title, w: 253, h: 80 }, dx: 0, dy: 0, dw: 0, dh: 46 } ],
+		styles: [ { property: 'size', figma: '28', page: '22', element: title } ],
+	} ), null, DEFAULTS );
+	assert.deepEqual( otherwise.defects.map( ( d ) => d.issue ), [ 'resized', 'style' ], 'a box that did not change with the size (a smaller font, a taller box) is still resized' );
+	const tiny = triageSection( wireframeSection( { styles: [
+		{ property: 'size', figma: '100', page: '90', element: title },
+		{ property: 'ls', figma: '0.4', page: '0', element: title },
+	] } ), null, DEFAULTS );
+	assert.equal( tiny.defects.length, 2, 'a letter spacing dropped to 0 does not follow a 10% size change' );
+	assert.equal( triageSection( wireframeSection( { styles: [
+		{ property: 'size', figma: '100', page: '90', element: title },
+		{ property: 'ls', figma: '0.4', page: '0.36', element: title },
+	] } ), null, DEFAULTS ).defects.length, 1, 'one scaled with it does' );
+} );
+
+test( 'elements alike that are all missing or all extra are one defect, with how many', () => {
+	// A grid of cards each with a badge the design lacks: one template difference, not one per card.
+	const badge = ( i ) => box( 'text', 68 + 300 * ( i % 4 ), 207 + 140 * Math.floor( i / 4 ), 87, 15, 'wood type' );
+	const s = triageSection( wireframeSection( {
+		missing: [ box( 'icon', 20, 20, 16, 16 ), box( 'icon', 20, 60, 16, 16 ), box( 'icon', 20, 100, 16, 16 ), box( 'icon', 20, 140, 24, 24 ) ],
+		extra: [ ...Array.from( { length: 20 }, ( _, i ) => badge( i ) ), box( 'text', 68, 400, 87, 15, 'brand' ) ],
+	} ), null, DEFAULTS );
+	assert.deepEqual( s.defects.map( ( d ) => [ d.issue, d.count, d.summary ] ), [
+		[ 'missing', 3, 'missing icon 16×16 at 20,20 and 2 more like it' ],
+		[ 'missing', 1, 'missing icon 24×24 at 20,140' ],
+		[ 'extra', 20, 'extra text 87×15 at 68,207 "wood type" and 19 more like it' ],
+		[ 'extra', 1, 'extra text 87×15 at 68,400 "brand"' ],
+	] );
+	assert.deepEqual( s.defects[ 0 ].figma, box( 'icon', 20, 20, 16, 16 ), 'the first stands for the rest, without the count inside it' );
 } );
 
 test( 'layout defects name the values on both sides and belong to the developer', () => {
@@ -173,6 +233,18 @@ test( 'layout defects name the values on both sides and belong to the developer'
 test( 'copy defects carry both texts', () => {
 	const s = triageSection( wireframeSection( { copy: [ { figma: box( 'text', 0, 0, 80, 20, 'company' ), page: box( 'text', 0, 0, 90, 20, 'subject *' ) } ] } ), null, DEFAULTS );
 	assert.equal( s.defects[ 0 ].summary, 'copy "company" → "subject *"' );
+	// Every card's placeholder brand replaced by the same real one is one defect (shop at 375: 48 of them).
+	const brand = ( y, page ) => ( { figma: box( 'text', 148, y, 80, 20, 'brand name' ), page: box( 'text', 148, y, 60, 20, page ) } );
+	const cards = triageSection( wireframeSection( { copy: [ brand( 100, 'charter' ), brand( 200, 'charter' ), brand( 300, 'charter' ), brand( 400, 'arauco' ) ] } ), null, DEFAULTS );
+	assert.deepEqual( cards.defects.map( ( d ) => [ d.count, d.summary ] ), [ [ 3, 'copy "brand name" → "charter" and 2 more like it' ], [ 1, 'copy "brand name" → "arauco"' ] ] );
+	assert.deepEqual( cards.defects[ 0 ].figma, box( 'text', 148, 100, 80, 20, 'brand name' ) );
+	// Two paragraphs that read the same in their first 28 characters are told apart by their hash.
+	const para = ( y, hash, pageHash ) => ( { figma: { ...box( 'text', 20, y, 600, 80, 'nisi ut mauris mauris erat m' ), hash }, page: { ...box( 'text', 20, y, 600, 80, 'nisi ut mauris mauris erat m' ), hash: pageHash } } );
+	const paras = triageSection( wireframeSection( { copy: [ para( 100, 'f1', 'p1' ), para( 300, 'f2', 'p2' ), para( 500, 'f1', 'p1' ) ] } ), null, DEFAULTS );
+	assert.deepEqual( paras.defects.map( ( d ) => d.count ), [ 2, 1 ] );
+	assert.equal( paras.defects[ 0 ].figma.hash, 'f1', 'the hash is carried for the reader too' );
+	const alike = triageSection( wireframeSection( { extra: [ { ...box( 'text', 20, 100, 600, 80, 'nisi ut mauris mauris erat m' ), hash: 'a' }, { ...box( 'text', 20, 300, 600, 80, 'nisi ut mauris mauris erat m' ), hash: 'b' } ] } ), null, DEFAULTS );
+	assert.equal( alike.defects.length, 2, 'extra texts alike only in their first characters stay apart' );
 	// Reports keep a text's first 28 characters: two texts can read the same there and differ after.
 	const prefix = 'massa vel sapien pellentesqu';
 	const same = triageSection( wireframeSection( { copy: [ { figma: box( 'text', 0, 0, 80, 20, prefix ), page: box( 'text', 0, 0, 90, 20, prefix ) } ] } ), null, DEFAULTS );
