@@ -63,7 +63,12 @@ export async function loadPage( page, url, reveal = [] ) {
 	page.on( 'response', ( r ) => watched.has( r.request().resourceType() ) && r.status() >= 400 && failures.push( `${ r.request().resourceType() } ${ r.url() } (${ r.status() })` ) );
 	for ( let attempt = 1; attempt <= 3; attempt++ ) {
 		failures = [];
-		await page.goto( cacheBusted( url ), { waitUntil: 'networkidle' } );
+		const response = await page.goto( cacheBusted( url ), { waitUntil: 'networkidle' } );
+		// An error page (a stopped dev site's 404, a login wall's 403) has sections of its own and
+		// would be compared as if it were the page.
+		if ( response && response.status() >= 400 ) {
+			throw new Error( `The page answered ${ response.status() } for ${ url }; is the site up and the page published?` );
+		}
 		await prepareForCapture( page, reveal );
 		// A stylesheet link can load without applying (blocked, or swapped by an optimiser).
 		const unloaded = await page.evaluate( () => [ ...document.querySelectorAll( 'link[rel="stylesheet"]' ) ]

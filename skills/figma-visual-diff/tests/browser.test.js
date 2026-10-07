@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { DEFAULT_CONFIG } from '../scripts/config.js';
-import { chromiumPath, prepareForCapture } from '../scripts/lib/browser.js';
+import { chromiumPath, loadPage, prepareForCapture } from '../scripts/lib/browser.js';
 import { drawsEdge, paddingOf } from '../scripts/lib/boxes.js';
 import { evaluateWithSections, extractPageBoxes, measureTwice } from '../scripts/lib/page.js';
 
@@ -78,6 +78,18 @@ test( 'content a scroll-animation library hides below the fold is shown for the 
 		await page.setViewportSize( { width: 800, height: 900 } );
 		await page.evaluate( () => new Promise( ( resolve ) => { window.dispatchEvent( new Event( 'scroll' ) ); setTimeout( resolve, 50 ); } ) );
 		assert.equal( ( await state() )[ 0 ][ 0 ], '1', 'and stays shown after the library strips its class again' );
+	} finally {
+		await browser.close();
+	}
+} );
+
+test( 'a page that answers with an error status is refused, not compared', { skip: ! chromium && 'Playwright Chromium not installed' }, async () => {
+	const browser = await chromium.launch( { executablePath } );
+	try {
+		const page = await browser.newPage( { viewport: { width: 800, height: 600 } } );
+		// A stopped ddev site: the router answers 404 with a page of its own.
+		await page.route( '**/*', ( route ) => route.fulfill( { status: 404, contentType: 'text/html', body: '<main><h1>404: No Route Found</h1></main>' } ) );
+		await assert.rejects( loadPage( page, 'https://stopped.test/mild-bunion-results/' ), /answered 404/ );
 	} finally {
 		await browser.close();
 	}
