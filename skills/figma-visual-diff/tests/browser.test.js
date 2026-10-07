@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { DEFAULT_CONFIG } from '../scripts/config.js';
-import { chromiumPath } from '../scripts/lib/browser.js';
+import { chromiumPath, prepareForCapture } from '../scripts/lib/browser.js';
 import { drawsEdge, paddingOf } from '../scripts/lib/boxes.js';
 import { evaluateWithSections, extractPageBoxes, measureTwice } from '../scripts/lib/page.js';
 
@@ -36,6 +36,48 @@ test( 'an icon-font glyph on an empty button is extracted as an icon', { skip: !
 			return [ Math.round( r.width ), Math.round( r.height ) ];
 		} );
 		assert.deepEqual( [ icons[ 0 ].w, icons[ 0 ].h ], button, 'the icon box is the button box' );
+	} finally {
+		await browser.close();
+	}
+} );
+
+test( 'content a scroll-animation library hides below the fold is shown for the capture', { skip: ! chromium && 'Playwright Chromium not installed' }, async () => {
+	const browser = await chromium.launch( { executablePath } );
+	try {
+		const page = await browser.newPage( { viewport: { width: 800, height: 600 } } );
+		// AOS: hidden and pushed down until .aos-animate, which it removes again when the element
+		// leaves the viewport, so a capture scrolled back to the top sees nothing below the fold.
+		await page.setContent( `<style>
+			body { margin: 0 } section { height: 700px }
+			[data-aos] { opacity: 0; transform: translateY(40px); transition: all .3s }
+			[data-aos].aos-animate { opacity: 1; transform: none }
+			[data-reveal-custom] { visibility: hidden }
+		</style>
+		<main><section class="block-hero"><h1 data-aos="fade-up" class="aos-animate">Hero</h1></section>
+		<section class="block-cards"><h2 data-aos="fade-up">Cards</h2><p data-reveal-custom>Custom</p><span class="wow" style="position:absolute;left:50%;transform:translateX(-50%)">Centred</span></section></main>
+		<script>
+			// What AOS does on every scroll: the class only while the element is in the viewport.
+			addEventListener( 'scroll', () => document.querySelectorAll( '[data-aos]' ).forEach( ( el ) => {
+				const r = el.getBoundingClientRect();
+				el.classList.toggle( 'aos-animate', r.bottom > 0 && r.top < innerHeight );
+			} ) );
+		</script>` );
+		const state = () => page.evaluate( () => [ 'h2', 'p' ].map( ( s ) => {
+			const el = document.querySelector( s );
+			const css = getComputedStyle( el );
+			return [ css.opacity, css.visibility, Math.round( el.getBoundingClientRect().top + window.scrollY ) ];
+		} ) );
+		assert.deepEqual( ( await state() )[ 0 ].slice( 0, 2 ), [ '0', 'visible' ], 'hidden before the capture is prepared' );
+		await prepareForCapture( page, [ '[data-reveal-custom]' ] );
+		const [ h2, p ] = await state();
+		assert.deepEqual( h2.slice( 0, 2 ), [ '1', 'visible' ] );
+		assert.equal( h2[ 2 ], Math.round( 700 + ( await page.evaluate( () => parseFloat( getComputedStyle( document.querySelector( 'h2' ) ).marginTop ) ) ) ), 'and where the layout puts it, not pushed down' );
+		assert.equal( p[ 1 ], 'visible', 'a project-configured selector is shown too' );
+		assert.notEqual( await page.evaluate( () => getComputedStyle( document.querySelector( '.wow' ) ).transform ), 'none', 'a transform that places a revealed element is kept' );
+		// A later resize (the second measurement) fires the library's handlers again.
+		await page.setViewportSize( { width: 800, height: 900 } );
+		await page.evaluate( () => new Promise( ( resolve ) => { window.dispatchEvent( new Event( 'scroll' ) ); setTimeout( resolve, 50 ); } ) );
+		assert.equal( ( await state() )[ 0 ][ 0 ], '1', 'and stays shown after the library strips its class again' );
 	} finally {
 		await browser.close();
 	}

@@ -52,10 +52,11 @@ export function cacheBusted( url, stamp = Date.now() ) {
  * Load the page and bring it to its settled state, reloading when a stylesheet, script or
  * font failed: a half-styled page would produce confident but meaningless verdicts.
  *
- * @param {import('playwright').Page} page Fresh page.
- * @param {string}                    url  Page URL.
+ * @param {import('playwright').Page} page   Fresh page.
+ * @param {string}                    url    Page URL.
+ * @param {string[]}                  reveal Selectors to show, as for prepareForCapture().
  */
-export async function loadPage( page, url ) {
+export async function loadPage( page, url, reveal = [] ) {
 	let failures = [];
 	const watched = new Set( [ 'stylesheet', 'script', 'font' ] );
 	page.on( 'requestfailed', ( r ) => watched.has( r.resourceType() ) && failures.push( `${ r.resourceType() } ${ r.url() } (${ r.failure()?.errorText })` ) );
@@ -63,7 +64,7 @@ export async function loadPage( page, url ) {
 	for ( let attempt = 1; attempt <= 3; attempt++ ) {
 		failures = [];
 		await page.goto( cacheBusted( url ), { waitUntil: 'networkidle' } );
-		await prepareForCapture( page );
+		await prepareForCapture( page, reveal );
 		// A stylesheet link can load without applying (blocked, or swapped by an optimiser).
 		const unloaded = await page.evaluate( () => [ ...document.querySelectorAll( 'link[rel="stylesheet"]' ) ]
 			.filter( ( l ) => ! l.sheet && ! l.disabled && ( ! l.media || matchMedia( l.media ).matches ) )
@@ -77,18 +78,32 @@ export async function loadPage( page, url ) {
 }
 
 /**
+ * Scroll-animation libraries' settled state: the class each adds once an element has scrolled
+ * into view, which its own CSS shows it by (AOS, sal.js), and elements a site hides until a
+ * library animates them (WOW, Animate.css), shown by opacity and visibility alone so a transform
+ * or clip that places them is kept.
+ */
+const SETTLED = { '[data-aos]': 'aos-animate', '[data-sal]': 'sal-animate' };
+const REVEAL = [ '.wow', '.animate__animated' ];
+
+/**
  * Bring the page to the state a visitor sees: run scripts that wait for interaction
  * (e.g. WP Rocket's delayed JS), load lazy media, and park every slider on its first
  * slide so captures don't depend on timing.
  *
- * @param {import('playwright').Page} page Loaded page.
+ * @param {import('playwright').Page} page   Loaded page.
+ * @param {string[]}                  reveal Selectors of elements the site hides until scrolled to, besides REVEAL.
  */
-export async function prepareForCapture( page ) {
+export async function prepareForCapture( page, reveal = [] ) {
 	await page.mouse.move( 5, 5 );
 	await page.mouse.move( 50, 50 );
 	await page.keyboard.press( 'Shift' );
 	await page.waitForLoadState( 'networkidle' );
 	await page.addStyleTag( { content: '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}' } );
+	// Scroll-animation libraries hide an element (opacity, a transform off its place) until it
+	// scrolls into view, and hide it again once it leaves, so a capture scrolled back to the top
+	// would see nothing below the fold. Shown as the visitor sees them once scrolled.
+	await page.addStyleTag( { content: `${ [ ...REVEAL, ...reveal ].join( ',' ) }{opacity:1!important;visibility:visible!important}` } );
 	await page.evaluate( async () => {
 		const sleep = ( ms ) => new Promise( ( resolve ) => setTimeout( resolve, ms ) );
 		// Native lazy images skipped while scrolling never load, and sit stable at their
@@ -134,6 +149,27 @@ export async function prepareForCapture( page ) {
 		}
 	} );
 	await page.waitForTimeout( 200 );
+	// After the sweep and its scroll handlers: a library takes its settled class away again from
+	// what scrolled out of view, and again on a later resize (a second measurement at a taller
+	// viewport), so it goes on last and is put back whenever it's removed.
+	await page.evaluate( ( settled ) => {
+		const classes = new Map();
+		const keep = new MutationObserver( ( mutations ) => mutations.forEach( ( m ) => {
+			// Only what's missing: a write of what's there would be another mutation to answer.
+			const missing = classes.get( m.target ).filter( ( cls ) => ! m.target.classList.contains( cls ) );
+			if ( missing.length ) {
+				m.target.classList.add( ...missing );
+			}
+		} ) );
+		for ( const [ selector, cls ] of Object.entries( settled ) ) {
+			for ( const el of document.querySelectorAll( selector ) ) {
+				// An element two libraries animate keeps both their classes.
+				classes.set( el, [ ...( classes.get( el ) ?? [] ), cls ] );
+				el.classList.add( cls );
+				keep.observe( el, { attributes: true, attributeFilter: [ 'class' ] } );
+			}
+		}
+	}, SETTLED );
 }
 
 /**
@@ -143,10 +179,11 @@ export async function prepareForCapture( page ) {
  * @param {string}   options.url            Page URL.
  * @param {number}   options.width          Viewport width (the Figma frame's width).
  * @param {number}   options.viewportHeight Viewport height; vh-sized sections size from it.
+ * @param {Object}   [options.config]       Loaded config; its `reveal` selectors are shown for the capture.
  * @param {Function} fn                     Receives the Playwright page.
  * @return {Promise<*>} What `fn` returns.
  */
-export async function withLoadedPage( { url, width, viewportHeight }, fn ) {
+export async function withLoadedPage( { url, width, viewportHeight, config }, fn ) {
 	const browser = await chromium.launch( { executablePath: chromiumPath() } );
 	try {
 		const page = await browser.newPage( {
@@ -155,7 +192,7 @@ export async function withLoadedPage( { url, width, viewportHeight }, fn ) {
 			reducedMotion: 'reduce',
 			ignoreHTTPSErrors: true,
 		} );
-		await loadPage( page, url );
+		await loadPage( page, url, config?.reveal ?? [] );
 		return await fn( page );
 	} finally {
 		await browser.close();

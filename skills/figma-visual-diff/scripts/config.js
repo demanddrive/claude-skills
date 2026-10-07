@@ -47,6 +47,9 @@ export const DEFAULT_CONFIG = {
 	figmaIgnore: '^(Navigation|Footer|Header|Wireframe Filter)\\b',
 	mask: [],
 	live: [ 'post-slider' ],
+	// Elements a scroll-animation library hides until scrolled to, beyond the ones known to
+	// lib/browser.js (AOS, WOW, sal.js, Animate.css): shown for the capture.
+	reveal: [],
 	iconClassPattern: '(^|\\s)icon-',
 	// Jev provider: null is OpenCode Zen (see lib/jev.js).
 	jev: null,

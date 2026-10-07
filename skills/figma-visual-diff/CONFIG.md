@@ -18,6 +18,7 @@ at its root. Every key is optional:
   "figmaIgnore": "^(Navigation|Footer|Header)\\b",
   "mask": [],
   "live": ["post-slider"],
+  "reveal": [".fade-in-on-scroll"],
   "iconClassPattern": "(^|\\s)icon-"
 }
 ```
@@ -30,6 +31,10 @@ at its root. Every key is optional:
   icons, surfaces without text, the spacing around them and the space to the section's edges.
   Text, anything sized by it (cards, tag pills, buttons), how many there are and the section
   height follow the posts.
+- `reveal` lists selectors a scroll-animation library hides until scrolled to, shown for the
+  capture (opacity and visibility; a transform or clip that places the element is kept). AOS
+  and sal.js elements get their settled class, and WOW and Animate.css elements are shown,
+  without listing them; a theme's own class goes here, else sections below the fold read as empty.
 
 ## Flags
 
