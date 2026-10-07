@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -21,7 +21,7 @@ import { disagreements, inPixelImage, renderReport } from '../scripts/lib/report
 import { analyseSection, drawsEdge, MAX_OFFSETS, matchBoxes, mergeFigmaRuns, mergeTextRuns, missingTextStyles, paddingOf, pairSections, pairStructure, sameToken, sectionScore, spacingTolerance, styleDiffs, uniqueBoxes } from '../scripts/lib/boxes.js';
 import { cacheBusted } from '../scripts/lib/browser.js';
 import { tokenValue } from '../scripts/lib/defects.js';
-import { parseFlags, sectionImage } from '../scripts/lib/cli.js';
+import { isMain, parseFlags, sectionImage } from '../scripts/lib/cli.js';
 import { extractBoxes, figmaScript, figmaSlug, hash, normText, parseFigma, TEXT_PREFIX, tileSections } from '../scripts/lib/figma.js';
 import { blankMedia, compareSection, mediaMask, readAnchors, REFINE, renderScale } from '../scripts/lib/pixels.js';
 import { alignedBox, alignedHeight, alignedRow, alignRows, anchorPoints, BAND_TOLERANCE, rowSources } from '../scripts/lib/align.js';
@@ -224,6 +224,23 @@ test( 'a section whose every defect is small is minor: correct, not exact, and s
 	const m = buildMetrics( report, { pageScore: 0.8, structure: { figmaSections: 3, pageSections: 3, missing: [], extra: [] } }, { pageScore: 0.7 } );
 	assert.deepEqual( [ m.correctness, m.exact, m.sections.ok, m.sections.minor, m.sections.withDefects ], [ 0.6667, 0.3333, 1, 1, 1 ] );
 	assert.equal( metricsDelta( m, { ...m, exact: undefined, correctness: 0.3333 } ).exact, 0, 'an older run without exact compares on its correctness' );
+} );
+
+test( 'a script is main when started through a symlink to it, as from a linked skill install', () => {
+	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-main-' ) );
+	const real = path.join( dir, 'real.js' );
+	fs.writeFileSync( real, '' );
+	fs.symlinkSync( real, path.join( dir, 'link.js' ) );
+	const argv1 = process.argv[ 1 ];
+	try {
+		process.argv[ 1 ] = path.join( dir, 'link.js' );
+		assert.equal( isMain( pathToFileURL( real ).href ), true );
+		process.argv[ 1 ] = path.join( dir, 'other.js' );
+		assert.equal( isMain( pathToFileURL( real ).href ), false, 'a missing path compares as given' );
+	} finally {
+		process.argv[ 1 ] = argv1;
+		fs.rmSync( dir, { recursive: true } );
+	}
 } );
 
 test( 'elements alike that are all missing or all extra are one defect, with how many', () => {
