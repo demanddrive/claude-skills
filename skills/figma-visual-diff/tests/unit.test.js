@@ -173,6 +173,10 @@ test( 'layout defects name the values on both sides and belong to the developer'
 test( 'copy defects carry both texts', () => {
 	const s = triageSection( wireframeSection( { copy: [ { figma: box( 'text', 0, 0, 80, 20, 'company' ), page: box( 'text', 0, 0, 90, 20, 'subject *' ) } ] } ), null, DEFAULTS );
 	assert.equal( s.defects[ 0 ].summary, 'copy "company" → "subject *"' );
+	// Reports keep a text's first 28 characters: two texts can read the same there and differ after.
+	const prefix = 'massa vel sapien pellentesqu';
+	const same = triageSection( wireframeSection( { copy: [ { figma: box( 'text', 0, 0, 80, 20, prefix ), page: box( 'text', 0, 0, 90, 20, prefix ) } ] } ), null, DEFAULTS );
+	assert.equal( same.defects[ 0 ].summary, 'copy "massa vel sapien pellentesqu…" differs after its first 28 characters' );
 } );
 
 test( 'a live section compares its template, not what the posts put in it', () => {
@@ -330,6 +334,18 @@ test( 'metrics compare with the previous run and accumulate in metrics.jsonl', (
 test( 'a section Figma draws empty only scores 1 if the page adds nothing', () => {
 	assert.equal( sectionScore( [], { pairs: [], extra: [] } ), 1 );
 	assert.equal( sectionScore( [], { pairs: [], extra: [ { type: 'text', x: 0, y: 0, w: 10, h: 10 } ] } ), 0 );
+} );
+
+test( 'a page background Figma paints as the frame fill does not count against the score', () => {
+	// form-cta at 375: 23 of 29 elements matched, and a 375×1201 background image with no Figma box.
+	const f = { type: 'text', x: 20, y: 20, w: 200, h: 40 };
+	const match = { pairs: [ { f, p: f, overlap: 1 } ], extra: [ { type: 'image', x: 0, y: 0, w: 375, h: 1201 } ] };
+	assert.ok( sectionScore( [ f ], match ) < 0.05, 'without the section size the background is an extra like any other' );
+	assert.equal( sectionScore( [ f ], match, { w: 375, h: 1201 } ), 1 );
+	const small = { ...match, extra: [ { type: 'image', x: 0, y: 0, w: 200, h: 200 } ] };
+	assert.ok( sectionScore( [ f ], small, { w: 375, h: 1201 } ) < 0.2, 'an image that is not a background still counts' );
+	const paragraph = { ...match, extra: [ { type: 'text', x: 0, y: 0, w: 375, h: 1201, text: 'lorem' } ] };
+	assert.ok( sectionScore( [ f ], paragraph, { w: 375, h: 1201 } ) < 0.05, 'a text the size of the section is content, not a background' );
 } );
 
 test( 'triage reports a missing --url before trying to use it', () => {

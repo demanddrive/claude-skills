@@ -92,6 +92,16 @@ function spacingSummary( s ) {
 }
 
 /**
+ * A copy change in words. Reports keep a text's first characters only, so two texts can read
+ * the same there and still differ (by their full hash): say so, rather than show two equal strings.
+ */
+function copySummary( c ) {
+	return c.figma.text === c.page.text
+		? `copy "${ c.figma.text }…" differs after its first ${ c.figma.text.length } characters`
+		: `copy "${ c.figma.text }" → "${ c.page.text }"`;
+}
+
+/**
  * Every defect in one section, most severe first.
  *
  * @param {Object}      w    Wireframe report section.
@@ -110,7 +120,7 @@ export function sectionDefects( w, p, args ) {
 		...w.missing.map( ( e ) => defect( 'content', 'missing', { figma: e }, `missing ${ describe( e ) }` ) ),
 		// Elements Figma doesn't have (e.g. a 4th card where the design shows 3).
 		...w.extra.map( ( e ) => defect( 'content', 'extra', { page: e }, `extra ${ describe( e ) }` ) ),
-		...w.copy.map( ( c ) => defect( 'content', 'copy', { figma: c.figma, page: c.page }, `copy "${ c.figma.text }" → "${ c.page.text }"` ) ),
+		...w.copy.map( ( c ) => defect( 'content', 'copy', { figma: c.figma, page: c.page }, copySummary( c ) ) ),
 		...w.shifted.map( ( s ) => defect( 'alignment', 'shifted', { figma: s.figma, page: s.page, delta: { x: s.dx } }, `${ describe( s.figma ) } shifted ${ sign( s.dx ) }` ) ),
 	];
 	const { dx, dy } = w.drift;
