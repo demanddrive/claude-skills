@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { DEFAULT_CONFIG, keepRunsLocal, loadConfig, localRunsRoot, projectRoot, runsDir, userConfigFile } from '../scripts/config.js';
 import { loadDeps, packageRoot } from '../scripts/deps.js';
 import { fetchFigmaFrame } from '../scripts/figma-rest.js';
-import { DEFAULTS, importFigma, parseArgs, pruneRuns, sameSection, triageSection, validateReport } from '../scripts/triage.js';
+import { DEFAULTS, importFigma, parseArgs, previousRun, pruneRuns, sameSection, triageSection, validateReport } from '../scripts/triage.js';
 import { appendHistory, buildMetrics, metricsDelta } from '../scripts/lib/metrics.js';
 import { colourDistance, defectFacts, diagnose, jevEndpoint, moduleQuestions, moduleState } from '../scripts/lib/jev.js';
 import { disagreements, inPixelImage, renderReport } from '../scripts/lib/report-html.js';
@@ -396,11 +396,38 @@ test( 'metrics compare with the previous run and accumulate in metrics.jsonl', (
 
 	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-metrics-' ) );
 	appendHistory( dir, '2026-09-25_120000', now );
-	appendHistory( dir, '2026-09-25_130000', now );
+	appendHistory( dir, '2026-09-25_130000', { ...now, figma: { hash: 'abc123def456', sections: [ 'Hero' ], nodeId: '12:34' } } );
 	const lines = fs.readFileSync( path.join( dir, 'metrics.jsonl' ), 'utf8' ).trim().split( '\n' ).map( ( l ) => JSON.parse( l ) );
 	assert.deepEqual( lines.map( ( l ) => l.run ), [ '2026-09-25_120000', '2026-09-25_130000' ] );
 	assert.equal( lines[ 0 ].correctness, 0.25 );
+	assert.deepEqual( [ lines[ 1 ].figma, lines[ 1 ].nodeId ], [ 'abc123def456', '12:34' ], 'the Figma inputs tell variants apart in the history' );
 	fs.rmSync( dir, { recursive: true } );
+} );
+
+test( 'a run is compared with the newest earlier run of the same URL and Figma inputs that compared a section', () => {
+	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-previous-' ) );
+	const write = ( run, triage ) => {
+		fs.mkdirSync( path.join( dir, run ) );
+		fs.writeFileSync( path.join( dir, run, 'triage.json' ), JSON.stringify( triage ) );
+	};
+	const url = 'https://site.test/block-demo-cover/';
+	const one = [ { index: 1 } ];
+	write( '2026-10-06_100000', { url, figma: { hash: 'wood00000000', sections: [ 'wood' ] }, sections: one } );
+	write( '2026-10-06_110000', { url, figma: { hash: 'brand0000000', sections: [ 'brands' ] }, sections: one } );
+	write( '2026-10-06_120000', { url, figma: { hash: 'wood00000000', sections: [ 'wood' ] }, sections: [] } ); // paired nothing
+	write( '2026-10-06_130000', { url: `${ url }?per_page=24`, figma: { hash: 'wood00000000', sections: [ 'wood' ] }, sections: one } );
+	const wood = { url, figma: { hash: 'wood00000000', sections: [ 'wood' ] } };
+	assert.equal( path.basename( previousRun( dir, path.join( dir, '2026-10-06_140000' ), wood ).dir ), '2026-10-06_100000', 'the brands run and the empty run are skipped, and so is another URL' );
+	assert.equal( path.basename( previousRun( dir, path.join( dir, '2026-10-06_140000' ), { url, figma: { hash: 'brand0000000' } } ).dir ), '2026-10-06_110000' );
+	assert.equal( previousRun( dir, path.join( dir, '2026-10-06_140000' ), { url, figma: { hash: 'other0000000' } } ), null, 'a first run against a variant has nothing to compare with' );
+	assert.equal( previousRun( dir, path.join( dir, '2026-10-06_140000' ), { url, figma: { hash: 'wood00000000', nodeId: '1:2' } } ), null, 'the same boxes from a known node do not match a run that knew none' );
+	write( '2026-10-06_135000', { url, figma: { hash: 'wood00000000', sections: [ 'wood' ], nodeId: '1:3' }, sections: one } );
+	assert.equal( previousRun( dir, path.join( dir, '2026-10-06_140000' ), { url, figma: { hash: 'wood00000000', nodeId: '1:2' } } ), null, 'nor one from another node' );
+	write( '2026-10-06_090000', { url, sections: one } ); // from before inputs were recorded
+	assert.equal( path.basename( previousRun( dir, path.join( dir, '2026-10-06_095000' ), { url, figma: { hash: 'other0000000' } } ).dir ), '2026-10-06_090000', 'older runs match on the URL alone' );
+	assert.equal( previousRun( dir, path.join( dir, '2026-10-06_090000' ), wood ), null, 'only earlier runs count' );
+	fs.rmSync( dir, { recursive: true } );
+	assert.equal( previousRun( path.join( dir, 'gone' ), 'x', wood ), null );
 } );
 
 test( 'a section Figma draws empty only scores 1 if the page adds nothing', () => {

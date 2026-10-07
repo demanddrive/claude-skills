@@ -81,6 +81,8 @@ export function metricsDelta( now, before ) {
  * @param {Object} report  triage.json content, with metrics.
  */
 export function appendHistory( runsDir, run, report ) {
-	const line = { run, url: report.url, width: report.width, pass: report.pass, ...report.metrics };
+	// The Figma inputs tell runs against different variants of a design apart.
+	const figma = report.figma ? { figma: report.figma.hash, ...( report.figma.nodeId ? { nodeId: report.figma.nodeId } : {} ) } : {};
+	const line = { run, url: report.url, width: report.width, pass: report.pass, ...figma, ...report.metrics };
 	fs.appendFileSync( path.join( runsDir, 'metrics.jsonl' ), `${ JSON.stringify( line ) }\n` );
 }

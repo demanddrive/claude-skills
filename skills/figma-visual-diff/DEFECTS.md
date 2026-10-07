@@ -126,8 +126,14 @@ defects (missing sections count against it, `dynamic` ones are left out; 1 is co
 section counts, defect counts by kind and owner, the wireframe and pixel scores, and with Jev
 `diagnosis.expectedCorrectness` (the expected share of sections a reviewer would accept) and
 `diagnosis.expectedFixes` (the expected number of defects they'd ask to fix). `metricsDelta` is
-the change since the previous run. Each run also appends its metrics to `metrics.jsonl` in the
-page/breakpoint runs folder, which keeps the build's history after old runs are pruned.
+the change since the `previous` run: the newest earlier run of the same URL against the same
+Figma inputs (`figma`: the boxes file by content, its section names and the node id when known)
+that compared a section, so a run against another variant or state of the design isn't the
+baseline for this one. Each run that compared a section also appends its metrics, with the
+Figma hash and node id, to `metrics.jsonl` in the page/breakpoint runs folder, which keeps the
+build's history after old runs are pruned. A warning names a section whose content sits over
+8px further across than in the previous run: the capture's x-origin moved, and its alignment
+and spacing defects may be the capture's rather than the build's.
 
 ## `report.html`
 

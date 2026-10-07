@@ -23,7 +23,18 @@
 			"items": { "$ref": "#/$defs/section" }
 		},
 		"metrics": { "$ref": "#/$defs/metrics" },
-		"previous": { "type": "string", "description": "The earlier run this one is compared with (a folder name)." },
+		"figma": {
+			"description": "The Figma inputs compared: the boxes file by content, so runs against another variant or state of the design aren't compared with this one.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": [ "hash", "sections" ],
+			"properties": {
+				"hash": { "type": "string", "description": "First 12 hex digits of the SHA-1 of figma-boxes.txt." },
+				"sections": { "type": "array", "items": { "type": "string" }, "description": "The Figma sections' names, in order." },
+				"nodeId": { "type": "string", "description": "The Figma node, when the run knew it (--node-id, or the boxes file named for it)." }
+			}
+		},
+		"previous": { "type": "string", "description": "The earlier run this one is compared with (a folder name): the newest with the same URL and Figma inputs that compared a section." },
 		"metricsDelta": {
 			"description": "This run's headline metrics minus the previous run's. Positive correctness and scores, and negative defect counts, are progress.",
 			"type": "object",
