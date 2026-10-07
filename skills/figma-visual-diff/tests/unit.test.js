@@ -193,6 +193,39 @@ test( 'tokens and a text box that follow a text\'s font size are its size defect
 	] } ), null, DEFAULTS ).defects.length, 1, 'one scaled with it does' );
 } );
 
+test( 'a section whose every defect is small is minor: correct, not exact, and still failing', () => {
+	const title = box( 'text', 71, 415, 298, 36, 'public education' );
+	const card = box( 'surface', 0, 0, 300, 200 );
+	const small = {
+		status: 'fail', score: 0.8, pageHeight: 530, heightDelta: 20, drift: { dx: 0, dy: 0, resized: 1 },
+		offsets: [ { figma: title, page: { ...title, h: 46 }, dx: 0, dy: 0, dw: 0, dh: 10 } ],
+		spacing: [ edgeSpace( 'top', title, 40, 52 ) ],
+		styles: [
+			{ property: 'fill', figma: '#ffffff', page: '#f8f8f7', element: card },
+			{ property: 'stroke', figma: 'none', page: '#e3e6e1/1', element: card },
+			{ property: 'lh', figma: '27.2', page: '25.6', element: title },
+		],
+	};
+	const s = triageSection( wireframeSection( small ), { score: 0.6 }, DEFAULTS );
+	assert.equal( s.verdict, 'minor' );
+	assert.deepEqual( s.defects.map( ( d ) => d.issue ).sort(), [ 'height', 'resized', 'spacing', 'style', 'style', 'style' ] );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'weight', figma: '500', page: '700', element: title } ] } ), null, DEFAULTS ).verdict, 'visual', 'a weight is not a step' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'fill', figma: '#609a37', page: '#ffffff', element: card } ] } ), null, DEFAULTS ).verdict, 'visual', 'a different colour is not near' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'fill', figma: '#00000010', page: '#000000e0', element: card } ] } ), null, DEFAULTS ).verdict, 'visual', 'the same colour at another opacity is not near' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'fill', figma: '#000000', page: '#000000f8', element: card } ] } ), null, DEFAULTS ).verdict, 'minor', 'an omitted alpha is opaque' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'radius', figma: '8', page: '8 8 8 10', element: card } ] } ), null, DEFAULTS ).verdict, 'minor', 'one radius against four corners compares corner by corner' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'radius', figma: '8', page: '8 8 8 12', element: card } ] } ), null, DEFAULTS ).verdict, 'visual' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'size', figma: '28', page: '24', element: title } ] } ), null, DEFAULTS ).verdict, 'visual', '4px of size is more than a step' );
+	assert.equal( triageSection( wireframeSection(), { score: 0.5 }, DEFAULTS ).verdict, 'minor', 'pixels alone are minor' );
+	assert.equal( triageSection( wireframeSection( { ...small, heightDelta: 40 } ), null, DEFAULTS ).verdict, 'layout', 'over twice the height tolerance' );
+	assert.equal( triageSection( wireframeSection( { ...small, missing: [ box( 'icon', 20, 20, 16, 16 ) ] } ), null, DEFAULTS ).verdict, 'content', 'content is never minor' );
+	const minor = { ...s, index: 2 };
+	const report = { structure: [], sections: [ triageSection( wireframeSection( { index: 1 } ), null, DEFAULTS ), minor, triageSection( wireframeSection( { index: 3, styles: [ { property: 'weight', figma: '500', page: '700', element: title } ] } ), null, DEFAULTS ) ] };
+	const m = buildMetrics( report, { pageScore: 0.8, structure: { figmaSections: 3, pageSections: 3, missing: [], extra: [] } }, { pageScore: 0.7 } );
+	assert.deepEqual( [ m.correctness, m.exact, m.sections.ok, m.sections.minor, m.sections.withDefects ], [ 0.6667, 0.3333, 1, 1, 1 ] );
+	assert.equal( metricsDelta( m, { ...m, exact: undefined, correctness: 0.3333 } ).exact, 0, 'an older run without exact compares on its correctness' );
+} );
+
 test( 'elements alike that are all missing or all extra are one defect, with how many', () => {
 	// A grid of cards each with a badge the design lacks: one template difference, not one per card.
 	const badge = ( i ) => box( 'text', 68 + 300 * ( i % 4 ), 207 + 140 * Math.floor( i / 4 ), 87, 15, 'wood type' );
@@ -352,7 +385,7 @@ function sampleReport() {
 
 test( 'a triage report with every kind of defect matches triage.schema.json', async () => {
 	const report = sampleReport();
-	assert.deepEqual( report.sections.map( ( s ) => s.verdict ), [ 'ok', 'content', 'visual', 'dynamic' ] );
+	assert.deepEqual( report.sections.map( ( s ) => s.verdict ), [ 'ok', 'content', 'minor', 'dynamic' ] );
 	assert.deepEqual( [ ...new Set( report.sections[ 1 ].defects.map( ( d ) => d.issue ) ) ], [ 'missing', 'copy', 'shifted', 'height', 'resized', 'aspect', 'spacing', 'style' ] );
 	report.previous = '2026-09-25_120000';
 	report.metricsDelta = metricsDelta( report.metrics, report.metrics );
@@ -375,9 +408,10 @@ test( 'the schema rejects a defect without the values its issue needs', async ()
 test( 'metrics count what is correct and who owns what is left', () => {
 	const { metrics, sections } = sampleReport();
 	const defects = sections.flatMap( ( sec ) => sec.defects );
-	// 5 Figma sections, one masked: hero is the only correct one of the 4 expected.
-	assert.equal( metrics.correctness, 0.25 );
-	assert.deepEqual( metrics.sections, { figma: 5, page: 4, paired: 4, ok: 1, dynamic: 1, withDefects: 2, missing: 1, extra: 0 } );
+	// 5 Figma sections, one masked: of the 4 expected, hero is exact and the pixels-only one minor.
+	assert.equal( metrics.correctness, 0.5 );
+	assert.equal( metrics.exact, 0.25 );
+	assert.deepEqual( metrics.sections, { figma: 5, page: 4, paired: 4, ok: 1, minor: 1, dynamic: 1, withDefects: 1, missing: 1, extra: 0 } );
 	assert.equal( metrics.defects.total, defects.length + 1 );
 	assert.equal( metrics.defects.byKind.structure, 1 );
 	assert.equal( metrics.defects.byOwner.developer, defects.filter( ( d ) => 'developer' === d.owner ).length );
@@ -392,14 +426,14 @@ test( 'metrics compare with the previous run and accumulate in metrics.jsonl', (
 	before.defects.total += 3;
 	before.defects.byOwner.page += 3;
 	before.scores.pixel = 0.65;
-	assert.deepEqual( metricsDelta( now.metrics, before ), { correctness: 0.25, defects: -3, pageDefects: -3, developerDefects: 0, wireframe: 0, pixel: 0.05 } );
+	assert.deepEqual( metricsDelta( now.metrics, before ), { correctness: 0.5, exact: 0, defects: -3, pageDefects: -3, developerDefects: 0, wireframe: 0, pixel: 0.05 } );
 
 	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-metrics-' ) );
 	appendHistory( dir, '2026-09-25_120000', now );
 	appendHistory( dir, '2026-09-25_130000', { ...now, figma: { hash: 'abc123def456', sections: [ 'Hero' ], nodeId: '12:34' } } );
 	const lines = fs.readFileSync( path.join( dir, 'metrics.jsonl' ), 'utf8' ).trim().split( '\n' ).map( ( l ) => JSON.parse( l ) );
 	assert.deepEqual( lines.map( ( l ) => l.run ), [ '2026-09-25_120000', '2026-09-25_130000' ] );
-	assert.equal( lines[ 0 ].correctness, 0.25 );
+	assert.equal( lines[ 0 ].correctness, 0.5 );
 	assert.deepEqual( [ lines[ 1 ].figma, lines[ 1 ].nodeId ], [ 'abc123def456', '12:34' ], 'the Figma inputs tell variants apart in the history' );
 	fs.rmSync( dir, { recursive: true } );
 } );

@@ -29,18 +29,22 @@ export function buildMetrics( report, wireframe, pixel ) {
 	const defects = [ ...structure, ...sections.flatMap( ( s ) => s.defects ) ];
 	const dynamic = sections.filter( ( s ) => 'dynamic' === s.verdict ).length;
 	const ok = sections.filter( ( s ) => 'ok' === s.verdict ).length;
+	const minor = sections.filter( ( s ) => 'minor' === s.verdict ).length;
 	const expected = wireframe.structure.figmaSections - dynamic;
 	const diagnosis = diagnosisMetrics( report, expected );
 	return {
-		// Figma sections on the page without a defect; missing sections count against it.
-		correctness: expected > 0 ? round( ok / expected ) : 1,
+		// Figma sections on the page with no defect, or only minor ones (see isMinor); missing
+		// sections count against it. `exact` counts those with no defect at all.
+		correctness: expected > 0 ? round( ( ok + minor ) / expected ) : 1,
+		exact: expected > 0 ? round( ok / expected ) : 1,
 		sections: {
 			figma: wireframe.structure.figmaSections,
 			page: wireframe.structure.pageSections,
 			paired: sections.length,
 			ok,
+			minor,
 			dynamic,
-			withDefects: sections.length - ok - dynamic,
+			withDefects: sections.length - ok - minor - dynamic,
 			missing: wireframe.structure.missing.length,
 			extra: wireframe.structure.extra.length,
 		},
@@ -64,6 +68,8 @@ export function buildMetrics( report, wireframe, pixel ) {
 export function metricsDelta( now, before ) {
 	return {
 		correctness: round( now.correctness - before.correctness ),
+		// Runs from before the minor tier have no exact share; their correctness was it.
+		exact: round( now.exact - ( before.exact ?? before.correctness ) ),
 		defects: now.defects.total - before.defects.total,
 		pageDefects: now.defects.byOwner.page - before.defects.byOwner.page,
 		developerDefects: now.defects.byOwner.developer - before.defects.byOwner.developer,

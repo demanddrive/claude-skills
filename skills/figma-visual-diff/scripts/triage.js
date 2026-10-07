@@ -242,7 +242,7 @@ export function triageSection( w, p, args ) {
 		index: w.index,
 		slug: w.slug,
 		figma: w.figma,
-		verdict: verdictOf( w, defects ),
+		verdict: verdictOf( w, defects, args ),
 		live: Boolean( w.live ),
 		wireframeScore: w.score,
 		pixelScore: p?.score,
@@ -396,7 +396,7 @@ async function main() {
 
 	const m = report.metrics;
 	const pc = ( n ) => `${ ( n * 100 ).toFixed( 1 ) }%`;
-	console.log( `${ report.pass ? 'PASS' : 'FAIL' } ${ report.width }px  correctness ${ pc( m.correctness ) } (${ m.sections.ok }/${ m.sections.figma - m.sections.dynamic } sections ok)  wireframe ${ pc( m.scores.wireframe ) }  pixels ${ pc( m.scores.pixel ) }` );
+	console.log( `${ report.pass ? 'PASS' : 'FAIL' } ${ report.width }px  correctness ${ pc( m.correctness ) } (${ m.sections.ok + m.sections.minor }/${ m.sections.figma - m.sections.dynamic } sections ok or minor, ${ m.sections.ok } exact)  wireframe ${ pc( m.scores.wireframe ) }  pixels ${ pc( m.scores.pixel ) }` );
 	if ( m.diagnosis ) {
 		console.log( `  jev ${ m.diagnosis.model }: expected correctness ${ pc( m.diagnosis.expectedCorrectness ) }, ${ m.diagnosis.signedOff } signed off, ${ m.diagnosis.needsReview } to review, ${ m.diagnosis.rejected } rejected; ${ m.diagnosis.expectedFixes } fixes expected, ${ m.diagnosis.negligible } defects negligible` );
 	} else if ( jev && ! jev.key ) {

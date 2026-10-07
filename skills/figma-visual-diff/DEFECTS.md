@@ -122,7 +122,14 @@ to look.
 ## Metrics
 
 `metrics` measures the build: `correctness` is the share of Figma sections on the page with no
-defects (missing sections count against it, `dynamic` ones are left out; 1 is correct), with
+defects or only `minor` ones (missing sections count against it, `dynamic` ones are left out;
+1 is correct), and `exact` the share with no defect at all. A section's verdict is `minor` when
+every defect is: a layout delta within twice its tolerance (spacing 16px, height 32px, a text
+box 16px, another box 6px), a style a step away (2px of size or line height, 1px of letter
+spacing, a near colour, a hairline border drawn or not) or `pixels` alone. Content, alignment
+and structure defects are never minor. A minor section still lists its defects and still fails
+the run (`pass` needs `ok` or `dynamic`); the tier keeps one small gap from reading as a wrong
+build. The metrics also carry
 section counts, defect counts by kind and owner, the wireframe and pixel scores, and with Jev
 `diagnosis.expectedCorrectness` (the expected share of sections a reviewer would accept) and
 `diagnosis.expectedFixes` (the expected number of defects they'd ask to fix). `metricsDelta` is

@@ -294,7 +294,7 @@ const BUCKET_LABELS = { 'signed-off': 'Signed off', review: 'Review', rejected: 
 export function disagreements( s ) {
 	const d = s.diagnosis;
 	const flags = [];
-	const rulesOk = 'ok' === s.verdict;
+	const rulesOk = 'ok' === s.verdict || 'minor' === s.verdict;
 	if ( rulesOk && d.correct < SIGN_OFF ) {
 		flags.push( `rules pass it, Jev wouldn't sign it off (${ pct( d.correct ) })` );
 	}
@@ -573,7 +573,7 @@ function metricsSummary( report ) {
 	const delta = ( n, scale = 100, unit = 'pt' ) => ( undefined === n ? '' : ` <span class="delta">${ n > 0 ? '+' : '' }${ Number( ( n * scale ).toFixed( 1 ) ) }${ unit }</span>` );
 	const d = report.metricsDelta ?? {};
 	const items = [
-		[ 'Measured correctness', `${ pct( m.correctness ) }${ delta( d.correctness ) }`, `${ m.sections.ok } of ${ m.sections.figma - m.sections.dynamic } sections without defects` ],
+		[ 'Measured correctness', `${ pct( m.correctness ) }${ delta( d.correctness ) }`, `${ m.sections.ok + ( m.sections.minor ?? 0 ) } of ${ m.sections.figma - m.sections.dynamic } sections with no or only minor defects · ${ m.sections.ok } exact` ],
 		m.diagnosis && [ 'Jev expected correctness', `${ pct( m.diagnosis.expectedCorrectness ) }${ delta( d.expectedCorrectness ) }`, `${ m.diagnosis.signedOff } signed off · ${ m.diagnosis.needsReview } review · ${ m.diagnosis.rejected } rejected · ${ m.diagnosis.expectedFixes } fixes expected · ${ m.diagnosis.negligible } negligible · ${ esc( m.diagnosis.model ) }` ],
 		[ 'Defects', `${ m.defects.total }${ delta( d.defects, 1, '' ) }`, `page ${ m.defects.byOwner.page } · developer ${ m.defects.byOwner.developer } · either ${ m.defects.byOwner[ 'page-or-developer' ] }` ],
 		[ 'Scores', `wireframe ${ pct( m.scores.wireframe ) } · pixels ${ pct( m.scores.pixel ) }`, '' ],
@@ -605,11 +605,11 @@ export function renderReport( report, run, dir = '' ) {
 <title>Visual diff ${ esc( new URL( report.url ).pathname ) } ${ width }px</title>
 <style>
 :root { --bg: #f7f7f8; --card: #fff; --text: #1d1d20; --muted: #6b6b76; --line: #e3e3e8; --accent: #3056d3; --track: #ececf1;
-	--structure: #8a1c7c; --content: #c0392b; --alignment: #b35c00; --layout: #1f5fbf; --visual: #6c3fc5; --ok: #1e7b45; --dynamic: #6b6b76; --review: #b58100; --flag: #b35c00; }
+	--structure: #8a1c7c; --content: #c0392b; --alignment: #b35c00; --layout: #1f5fbf; --visual: #6c3fc5; --ok: #1e7b45; --minor: #3d8f8a; --dynamic: #6b6b76; --review: #b58100; --flag: #b35c00; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141417; --card: #1d1d22; --text: #ececf1; --muted: #9a9aa6; --line: #2e2e36; --accent: #7d9bff; --track: #2a2a31;
-	--structure: #e07fd3; --content: #ff7b6e; --alignment: #ffae57; --layout: #74a7ff; --visual: #b596ff; --ok: #5fd08f; --dynamic: #9a9aa6; --review: #e8c15a; --flag: #ffae57; } }
+	--structure: #e07fd3; --content: #ff7b6e; --alignment: #ffae57; --layout: #74a7ff; --visual: #b596ff; --ok: #5fd08f; --minor: #6fd3cd; --dynamic: #9a9aa6; --review: #e8c15a; --flag: #ffae57; } }
 :root[data-theme="dark"] { --bg: #141417; --card: #1d1d22; --text: #ececf1; --muted: #9a9aa6; --line: #2e2e36; --accent: #7d9bff; --track: #2a2a31;
-	--structure: #e07fd3; --content: #ff7b6e; --alignment: #ffae57; --layout: #74a7ff; --visual: #b596ff; --ok: #5fd08f; --dynamic: #9a9aa6; --review: #e8c15a; --flag: #ffae57; }
+	--structure: #e07fd3; --content: #ff7b6e; --alignment: #ffae57; --layout: #74a7ff; --visual: #b596ff; --ok: #5fd08f; --minor: #6fd3cd; --dynamic: #9a9aa6; --review: #e8c15a; --flag: #ffae57; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
 .top { max-width: 1680px; margin: 0 auto; padding: 24px 16px 0; }
@@ -652,7 +652,7 @@ a { color: var(--accent); overflow-wrap: anywhere; }
 .crumb a { text-decoration: none; }
 .summary { margin: 0 0 12px; }
 .tag { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 4px; padding: 0 6px; color: var(--card); background: var(--muted); vertical-align: 1px; }
-${ [ 'structure', 'content', 'alignment', 'layout', 'visual', 'ok', 'dynamic' ].map( ( k ) => `.tag-${ k } { background: var(--${ k }); }` ).join( '\n' ) }
+${ [ 'structure', 'content', 'alignment', 'layout', 'visual', 'ok', 'minor', 'dynamic' ].map( ( k ) => `.tag-${ k } { background: var(--${ k }); }` ).join( '\n' ) }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; vertical-align: top; padding: 6px 8px; border-top: 1px solid var(--line); }
 th { font-size: 12px; color: var(--muted); font-weight: 600; border-top: 0; }

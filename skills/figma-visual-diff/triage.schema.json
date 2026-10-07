@@ -42,6 +42,7 @@
 			"required": [ "correctness", "defects", "pageDefects", "developerDefects", "wireframe", "pixel" ],
 			"properties": {
 				"correctness": { "type": "number" },
+				"exact": { "type": "number" },
 				"defects": { "type": "integer" },
 				"pageDefects": { "type": "integer" },
 				"developerDefects": { "type": "integer" },
@@ -75,7 +76,8 @@
 			"additionalProperties": false,
 			"required": [ "correctness", "sections", "defects", "scores" ],
 			"properties": {
-				"correctness": { "$ref": "#/$defs/ratio", "description": "Share of Figma sections that are on the page with no defects. Missing sections count against it; masked (dynamic) sections are left out. 1 is a correct build." },
+				"correctness": { "$ref": "#/$defs/ratio", "description": "Share of Figma sections that are on the page with no defects or only minor ones. Missing sections count against it; masked (dynamic) sections are left out. 1 is a correct build." },
+				"exact": { "$ref": "#/$defs/ratio", "description": "Share of Figma sections on the page with no defect at all (correctness before the minor tier)." },
 				"sections": {
 					"type": "object",
 					"additionalProperties": false,
@@ -84,7 +86,8 @@
 						"figma": { "$ref": "#/$defs/count", "description": "Sections in the Figma frame." },
 						"page": { "$ref": "#/$defs/count", "description": "Sections found on the page." },
 						"paired": { "$ref": "#/$defs/count", "description": "Figma sections matched to a page section." },
-						"ok": { "$ref": "#/$defs/count" },
+						"ok": { "$ref": "#/$defs/count", "description": "Sections with no defect." },
+						"minor": { "$ref": "#/$defs/count", "description": "Sections whose every defect is minor." },
 						"dynamic": { "$ref": "#/$defs/count" },
 						"withDefects": { "$ref": "#/$defs/count" },
 						"missing": { "$ref": "#/$defs/count", "description": "Figma sections with no page section." },
@@ -330,7 +333,7 @@
 				"index": { "type": "integer", "description": "1-based position in Figma." },
 				"slug": { "type": "string", "description": "The block slug, e.g. content-media-split." },
 				"figma": { "type": "string", "description": "The Figma layer name." },
-				"verdict": { "enum": [ "ok", "dynamic", "content", "alignment", "layout", "visual" ], "description": "The most severe defect kind; dynamic: a masked section, only its presence is checked." },
+				"verdict": { "enum": [ "ok", "minor", "dynamic", "content", "alignment", "layout", "visual" ], "description": "The most severe defect kind; minor: every defect is small (a layout delta within twice its tolerance, a style a step away, pixels alone); dynamic: a masked section, only its presence is checked." },
 				"live": { "type": "boolean", "description": "Shows live posts: only its template is compared, not text, what's sized by it, item counts or height." },
 				"wireframeScore": { "type": "number" },
 				"pixelScore": { "type": "number" },

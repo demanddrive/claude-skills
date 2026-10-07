@@ -233,16 +233,82 @@ export function structureDefects( { missing, extra, moved } ) {
 	];
 }
 
+/** A style token within this much of Figma's is a step away, not a different design. */
+const MINOR_STEP = { size: 2, lh: 2, ls: 1, radius: 2 };
+/** Colour channels (0-255) within this read as the same colour at a glance (#ffffff and #f8f8f7). */
+const MINOR_CHANNEL = 24;
+
+const numbers = ( v ) => String( v ).split( ' ' ).map( Number );
+// Red, green, blue and alpha, an omitted alpha being opaque: #00000010 and #000000e0 differ.
+const channels = ( hex ) => {
+	const c = ( String( hex ).match( /[0-9a-f]{2}/gi ) || [] ).map( ( v ) => parseInt( v, 16 ) );
+	return 3 === c.length ? [ ...c, 255 ] : c;
+};
+const nearColour = ( a, b ) => {
+	const [ ca, cb ] = [ channels( a ), channels( b ) ];
+	return 4 === ca.length && 4 === cb.length && ca.every( ( v, i ) => Math.abs( v - cb[ i ] ) <= MINOR_CHANNEL );
+};
+// A border is a hairline when every side is none or at most 1px: a divider drawn or not.
+const hairlines = ( v ) => String( v ).split( ' ' ).every( ( side ) => 'none' === side || Number( side.split( '/' )[ 1 ] ) <= 1 );
+
 /**
- * The section's headline: its most severe defect kind.
+ * Whether a defect is minor: present and measured, but small enough that a reviewer rarely
+ * asks for it. Content, alignment and structure never are; a layout defect is within twice its
+ * tolerance; a style defect is a step away (2px of size, a near colour, a hairline border) or
+ * pixels alone. What's minor is still a defect; it just doesn't fail the section's correctness.
+ *
+ * @param {Object} d    Defect.
+ * @param {Object} args Thresholds, as for sectionDefects().
+ * @return {boolean}
+ */
+export function isMinor( d, args ) {
+	if ( 'layout' === d.kind ) {
+		if ( 'spacing' === d.issue ) {
+			return Math.abs( d.delta ) <= 2 * args.tolerance;
+		}
+		if ( 'height' === d.issue ) {
+			return Math.abs( d.delta ) <= 2 * args.heightTolerance;
+		}
+		if ( 'resized' === d.issue ) {
+			const t = 2 * ( 'text' === d.figma.type ? args.tolerance : args.sizeTolerance );
+			return Math.abs( d.delta.w ) <= t && Math.abs( d.delta.h ) <= t;
+		}
+		return false;
+	}
+	if ( 'visual' === d.kind ) {
+		if ( 'pixels' === d.issue ) {
+			return true;
+		}
+		if ( d.property in MINOR_STEP ) {
+			// A radius is one number when the corners agree and four when they don't.
+			const corners = ( values ) => ( 'radius' === d.property && 1 === values.length ? Array( 4 ).fill( values[ 0 ] ) : values );
+			const [ a, b ] = [ corners( numbers( d.figma ) ), corners( numbers( d.page ) ) ];
+			return a.length === b.length && a.every( ( v, i ) => Math.abs( v - b[ i ] ) <= MINOR_STEP[ d.property ] );
+		}
+		if ( 'color' === d.property || 'fill' === d.property ) {
+			return nearColour( d.figma, d.page );
+		}
+		if ( 'stroke' === d.property ) {
+			return hairlines( d.figma ) && hairlines( d.page );
+		}
+	}
+	return false;
+}
+
+/**
+ * The section's headline: its most severe defect kind, or `minor` when every defect is.
  *
  * @param {Object} w       Wireframe report section.
  * @param {Array}  defects sectionDefects() result.
- * @return {string} A defect kind, `dynamic` or `ok`.
+ * @param {Object} args    Thresholds, as for sectionDefects().
+ * @return {string} A defect kind, `minor`, `dynamic` or `ok`.
  */
-export function verdictOf( w, defects ) {
+export function verdictOf( w, defects, args ) {
 	if ( 'masked' === w.status ) {
 		return 'dynamic';
 	}
-	return defects[ 0 ]?.kind ?? 'ok';
+	if ( ! defects.length ) {
+		return 'ok';
+	}
+	return defects.every( ( d ) => isMinor( d, args ) ) ? 'minor' : defects[ 0 ].kind;
 }
