@@ -196,7 +196,7 @@ export function sectionDefects( w, p, args ) {
 	// Design tokens: one defect per difference, however many elements share it (e.g. every
 	// card title a size smaller), with how many do.
 	for ( const { property, figma, page, count, element } of group( styles.filter( ( d ) => ! followsSize( d ) ), ( d ) => [ d.element.type, d.property, d.figma, d.page ] ) ) {
-		const name = `${ element.type }${ element.text ? ` "${ element.text }"` : '' }${ count > 1 ? ` and ${ count - 1 } more like it` : '' }`;
+		const name = `${ element.type }${ element.text ? ` "${ element.text }"` : '' }${ more( count ) }`;
 		const summary = 'text-style' === property
 			? `text style ${ figma } (e.g. "${ element.text }") isn't used on the page${ page ? `; closest: ${ page }` : '' }`
 			: `${ name }: ${ TOKEN_LABELS[ property ] } ${ tokenValue( property, figma ) } in Figma, ${ tokenValue( property, page ) } on the page`;

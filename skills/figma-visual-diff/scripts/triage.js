@@ -343,12 +343,12 @@ async function main() {
 	};
 	const previous = previousRun( args.runsDir, args.out, report );
 	const before = previous?.triage;
+	const beforeByIndex = new Map( ( before?.sections ?? [] ).map( ( s ) => [ s.index, s ] ) );
 	if ( before ) {
 		// The same page and design, captured again: a section whose content now sits further
 		// across was measured from another x-origin, and its alignment and spacing defects say so.
-		const byIndex = new Map( before.sections.map( ( s ) => [ s.index, s ] ) );
 		for ( const s of sections ) {
-			const b = byIndex.get( s.index );
+			const b = beforeByIndex.get( s.index );
 			const jump = s.drift && b?.drift && b.slug === s.slug ? Math.abs( s.drift.dx - b.drift.dx ) : 0;
 			if ( jump >= X_ORIGIN_JUMP ) {
 				report.warnings.push( `Section #${ s.index } ${ s.slug }: its content sits ${ s.drift.dx }px across from Figma, ${ b.drift.dx }px in run ${ path.basename( previous.dir ) } with the same inputs. Either the page's layout changed or the capture's x-origin did; run again before fixing its alignment and spacing defects.` );
@@ -361,10 +361,9 @@ async function main() {
 	}
 	report.metrics = buildMetrics( report, wireframe, pixel );
 	if ( before ) {
-		const byIndex = new Map( before.sections.map( ( s ) => [ s.index, s ] ) );
 		report.previous = path.basename( previous.dir );
 		report.changes = sections
-			.map( ( s ) => ( { index: s.index, slug: s.slug, before: byIndex.get( s.index )?.verdict, after: s.verdict } ) )
+			.map( ( s ) => ( { index: s.index, slug: s.slug, before: beforeByIndex.get( s.index )?.verdict, after: s.verdict } ) )
 			.filter( ( c ) => c.before !== c.after );
 		// Runs from before metrics existed have none to compare with.
 		if ( before.metrics ) {
