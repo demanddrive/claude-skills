@@ -542,6 +542,27 @@ test( 'the extractor reproduces, from REST data, what it produced inside Figma f
 	assert.equal( extract( node ), expected );
 } );
 
+test( 'a frame too large for use_figma comes back in parts that join into the whole file', async () => {
+	// 400 text boxes of multi-byte copy: one use_figma result would pass its 20 KB cut.
+	const text = ( i ) => ( { id: `t${ i }`, type: 'TEXT', visible: true, characters: `段落 ${ i } のテキストはここに続きます、長いページ`, absoluteBoundingBox: { x: 10, y: i * 20, width: 200, height: 18 } } );
+	const frame = { id: '1:2', type: 'FRAME', visible: true, absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 8000 }, children: [
+		{ id: '1:3', type: 'FRAME', name: 'Body', visible: true, absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 8000 }, children: Array.from( { length: 400 }, ( _, i ) => text( i ) ) },
+	] };
+	const AsyncFunction = Object.getPrototypeOf( async () => {} ).constructor;
+	const run = ( part ) => new AsyncFunction( 'figma', execFileSync( process.execPath, [ path.join( here, '..', 'scripts', 'config.js' ), 'figma-boxes', '1:2', '--part', String( part ) ], { encoding: 'utf8' } ) )( { getNodeByIdAsync: async () => frame } );
+
+	const first = await run( 0 );
+	const parts = Number( first.split( '\n' ).at( -1 ).split( '|' )[ 2 ] );
+	assert.ok( parts > 1 );
+	const outputs = [ first ];
+	for ( let i = 1; i < parts; i++ ) {
+		outputs.push( await run( i ) );
+	}
+	assert.ok( outputs.every( ( o ) => Buffer.byteLength( o ) <= 20000 ) );
+	assert.match( await run( parts ), /^No part/ );
+	assert.equal( outputs.join( '\n' ).split( '\n' ).filter( ( l ) => ! l.startsWith( 'P|' ) ).join( '\n' ), extractBoxes( frame, { ignore: DEFAULT_CONFIG.figmaIgnore } ) );
+} );
+
 test( 'section mode treats the node as one section, via REST and in Figma', async () => {
 	// rest-section.single.expected.txt: the extractor with --section on the same node inside Figma.
 	const node = JSON.parse( fs.readFileSync( path.join( here, 'fixtures', 'rest-section.json' ), 'utf8' ) );
