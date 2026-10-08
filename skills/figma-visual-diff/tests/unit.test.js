@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -14,14 +14,14 @@ import { execFileSync } from 'node:child_process';
 import { DEFAULT_CONFIG, keepRunsLocal, loadConfig, localRunsRoot, projectRoot, runsDir, userConfigFile } from '../scripts/config.js';
 import { loadDeps, packageRoot } from '../scripts/deps.js';
 import { fetchFigmaFrame } from '../scripts/figma-rest.js';
-import { DEFAULTS, importFigma, parseArgs, pruneRuns, sameSection, triageSection, validateReport } from '../scripts/triage.js';
+import { DEFAULTS, importFigma, parseArgs, previousRun, pruneRuns, sameSection, triageSection, validateReport } from '../scripts/triage.js';
 import { appendHistory, buildMetrics, metricsDelta } from '../scripts/lib/metrics.js';
 import { colourDistance, defectFacts, diagnose, jevEndpoint, moduleQuestions, moduleState } from '../scripts/lib/jev.js';
 import { disagreements, inPixelImage, renderReport } from '../scripts/lib/report-html.js';
 import { analyseSection, drawsEdge, MAX_OFFSETS, matchBoxes, mergeFigmaRuns, mergeTextRuns, missingTextStyles, paddingOf, pairSections, pairStructure, sameToken, sectionScore, spacingTolerance, styleDiffs, uniqueBoxes } from '../scripts/lib/boxes.js';
 import { cacheBusted } from '../scripts/lib/browser.js';
 import { tokenValue } from '../scripts/lib/defects.js';
-import { parseFlags, sectionImage } from '../scripts/lib/cli.js';
+import { isMain, parseFlags, sectionImage } from '../scripts/lib/cli.js';
 import { extractBoxes, figmaScript, figmaSlug, hash, normText, parseFigma, TEXT_PREFIX, tileSections } from '../scripts/lib/figma.js';
 import { blankMedia, compareSection, mediaMask, readAnchors, REFINE, renderScale } from '../scripts/lib/pixels.js';
 import { alignedBox, alignedHeight, alignedRow, alignRows, anchorPoints, BAND_TOLERANCE, rowSources } from '../scripts/lib/align.js';
@@ -144,9 +144,119 @@ test( 'a sideways-shifted element is an alignment defect even when the section h
 test( 'every missing or extra element is its own defect, numbered within its section', () => {
 	const s = triageSection( wireframeSection( { missing: [ box( 'image', 540, 71, 160, 107 ), box( 'icon', 20, 20, 24, 24 ) ], extra: [ box( 'surface', 20, 817, 85, 85 ) ] } ), null, DEFAULTS );
 	assert.equal( s.verdict, 'content' );
-	assert.deepEqual( s.defects.map( ( d ) => [ d.id, d.issue, d.owner ] ), [ [ '3.1', 'missing', 'page' ], [ '3.2', 'missing', 'page' ], [ '3.3', 'extra', 'page' ] ] );
+	assert.deepEqual( s.defects.map( ( d ) => [ d.id, d.issue, d.owner, d.count ] ), [ [ '3.1', 'missing', 'page', 1 ], [ '3.2', 'missing', 'page', 1 ], [ '3.3', 'extra', 'page', 1 ] ] );
 	assert.deepEqual( s.defects[ 0 ].figma, box( 'image', 540, 71, 160, 107 ) );
 	assert.deepEqual( s.defects[ 2 ].page, box( 'surface', 20, 817, 85, 85 ) );
+} );
+
+test( 'tokens and a text box that follow a text\'s font size are its size defect, not their own', () => {
+	// shop-archive at 375: an h1 at 22px instead of 28px was a size, a line height and a resized defect.
+	const title = box( 'text', 21, 60, 253, 34, 'shop all products' );
+	const s = triageSection( wireframeSection( { styles: [
+		{ property: 'size', figma: '17', page: '16', element: title },
+		{ property: 'lh', figma: '27.2', page: '25.6', element: title }, // 1.6× the size on both sides
+		{ property: 'ls', figma: '1.7', page: '1.6', element: title }, // 0.1× the size on both sides
+	] } ), null, DEFAULTS );
+	assert.deepEqual( s.defects.map( ( d ) => d.summary ), [ 'text "shop all products": font size 17px in Figma, 16px on the page' ] );
+	const own = triageSection( wireframeSection( { styles: [
+		{ property: 'size', figma: '17', page: '16', element: title },
+		{ property: 'lh', figma: '27.2', page: '32', element: title },
+	] } ), null, DEFAULTS );
+	assert.equal( own.defects.length, 2, 'a line height that does not follow the size is its own defect' );
+	const sized = triageSection( wireframeSection( {
+		offsets: [ { figma: title, page: { ...title, w: 204, h: 28 }, dx: 0, dy: 0, dw: -49, dh: -6 } ],
+		styles: [ { property: 'size', figma: '28', page: '22', element: title } ],
+	} ), null, DEFAULTS );
+	assert.deepEqual( sized.defects.map( ( d ) => d.issue ), [ 'style' ], 'a text box that only changed with its font size is not resized on its own' );
+	const unsized = triageSection( wireframeSection( { offsets: [ { figma: title, page: { ...title, w: 204, h: 28 }, dx: 0, dy: 0, dw: -49, dh: -6 } ] } ), null, DEFAULTS );
+	assert.deepEqual( unsized.defects.map( ( d ) => d.issue ), [ 'resized' ] );
+	// Wrapped text carries its layout box either way; one that didn't change doesn't make the text its own defect.
+	const wrapped = ( textBox ) => triageSection( wireframeSection( {
+		offsets: [ { figma: title, page: { ...title, w: 204, h: 28 }, dx: 0, dy: 0, dw: -49, dh: -6, textBox } ],
+		styles: [ { property: 'size', figma: '28', page: '22', element: title } ],
+	} ), null, DEFAULTS ).defects.map( ( d ) => d.issue );
+	assert.deepEqual( wrapped( { figma: 584, page: 584 } ), [ 'style' ] );
+	assert.deepEqual( wrapped( { figma: 584, page: 500 } ), [ 'resized', 'style' ], 'a layout box that changed is' );
+	const otherwise = triageSection( wireframeSection( {
+		offsets: [ { figma: title, page: { ...title, w: 253, h: 80 }, dx: 0, dy: 0, dw: 0, dh: 46 } ],
+		styles: [ { property: 'size', figma: '28', page: '22', element: title } ],
+	} ), null, DEFAULTS );
+	assert.deepEqual( otherwise.defects.map( ( d ) => d.issue ), [ 'resized', 'style' ], 'a box that did not change with the size (a smaller font, a taller box) is still resized' );
+	const tiny = triageSection( wireframeSection( { styles: [
+		{ property: 'size', figma: '100', page: '90', element: title },
+		{ property: 'ls', figma: '0.4', page: '0', element: title },
+	] } ), null, DEFAULTS );
+	assert.equal( tiny.defects.length, 2, 'a letter spacing dropped to 0 does not follow a 10% size change' );
+	assert.equal( triageSection( wireframeSection( { styles: [
+		{ property: 'size', figma: '100', page: '90', element: title },
+		{ property: 'ls', figma: '0.4', page: '0.36', element: title },
+	] } ), null, DEFAULTS ).defects.length, 1, 'one scaled with it does' );
+} );
+
+test( 'a section whose every defect is small is minor: correct, not exact, and still failing', () => {
+	const title = box( 'text', 71, 415, 298, 36, 'public education' );
+	const card = box( 'surface', 0, 0, 300, 200 );
+	const small = {
+		status: 'fail', score: 0.8, pageHeight: 530, heightDelta: 20, drift: { dx: 0, dy: 0, resized: 1 },
+		offsets: [ { figma: title, page: { ...title, h: 46 }, dx: 0, dy: 0, dw: 0, dh: 10 } ],
+		spacing: [ edgeSpace( 'top', title, 40, 52 ) ],
+		styles: [
+			{ property: 'fill', figma: '#ffffff', page: '#f8f8f7', element: card },
+			{ property: 'stroke', figma: 'none', page: '#e3e6e1/1', element: card },
+			{ property: 'lh', figma: '27.2', page: '25.6', element: title },
+		],
+	};
+	const s = triageSection( wireframeSection( small ), { score: 0.6 }, DEFAULTS );
+	assert.equal( s.verdict, 'minor' );
+	assert.deepEqual( s.defects.map( ( d ) => d.issue ).sort(), [ 'height', 'resized', 'spacing', 'style', 'style', 'style' ] );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'weight', figma: '500', page: '700', element: title } ] } ), null, DEFAULTS ).verdict, 'visual', 'a weight is not a step' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'fill', figma: '#609a37', page: '#ffffff', element: card } ] } ), null, DEFAULTS ).verdict, 'visual', 'a different colour is not near' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'fill', figma: '#00000010', page: '#000000e0', element: card } ] } ), null, DEFAULTS ).verdict, 'visual', 'the same colour at another opacity is not near' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'fill', figma: '#000000', page: '#000000f8', element: card } ] } ), null, DEFAULTS ).verdict, 'minor', 'an omitted alpha is opaque' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'radius', figma: '8', page: '8 8 8 10', element: card } ] } ), null, DEFAULTS ).verdict, 'minor', 'one radius against four corners compares corner by corner' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'radius', figma: '8', page: '8 8 8 12', element: card } ] } ), null, DEFAULTS ).verdict, 'visual' );
+	assert.equal( triageSection( wireframeSection( { styles: [ { property: 'size', figma: '28', page: '24', element: title } ] } ), null, DEFAULTS ).verdict, 'visual', '4px of size is more than a step' );
+	assert.equal( triageSection( wireframeSection(), { score: 0.5 }, DEFAULTS ).verdict, 'minor', 'pixels alone are minor' );
+	assert.equal( triageSection( wireframeSection( { ...small, heightDelta: 40 } ), null, DEFAULTS ).verdict, 'layout', 'over twice the height tolerance' );
+	assert.equal( triageSection( wireframeSection( { ...small, missing: [ box( 'icon', 20, 20, 16, 16 ) ] } ), null, DEFAULTS ).verdict, 'content', 'content is never minor' );
+	const minor = { ...s, index: 2 };
+	const report = { structure: [], sections: [ triageSection( wireframeSection( { index: 1 } ), null, DEFAULTS ), minor, triageSection( wireframeSection( { index: 3, styles: [ { property: 'weight', figma: '500', page: '700', element: title } ] } ), null, DEFAULTS ) ] };
+	const m = buildMetrics( report, { pageScore: 0.8, structure: { figmaSections: 3, pageSections: 3, missing: [], extra: [] } }, { pageScore: 0.7 } );
+	assert.deepEqual( [ m.correctness, m.exact, m.sections.ok, m.sections.minor, m.sections.withDefects ], [ 0.6667, 0.3333, 1, 1, 1 ] );
+	assert.equal( metricsDelta( m, { ...m, exact: undefined, correctness: 0.3333 } ).exact, 0, 'an older run without exact compares on its correctness' );
+} );
+
+test( 'a script is main when started through a symlink to it, as from a linked skill install', () => {
+	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-main-' ) );
+	const real = path.join( dir, 'real.js' );
+	fs.writeFileSync( real, '' );
+	fs.symlinkSync( real, path.join( dir, 'link.js' ) );
+	const argv1 = process.argv[ 1 ];
+	try {
+		process.argv[ 1 ] = path.join( dir, 'link.js' );
+		assert.equal( isMain( pathToFileURL( real ).href ), true );
+		process.argv[ 1 ] = path.join( dir, 'other.js' );
+		assert.equal( isMain( pathToFileURL( real ).href ), false, 'a missing path compares as given' );
+	} finally {
+		process.argv[ 1 ] = argv1;
+		fs.rmSync( dir, { recursive: true } );
+	}
+} );
+
+test( 'elements alike that are all missing or all extra are one defect, with how many', () => {
+	// A grid of cards each with a badge the design lacks: one template difference, not one per card.
+	const badge = ( i ) => box( 'text', 68 + 300 * ( i % 4 ), 207 + 140 * Math.floor( i / 4 ), 87, 15, 'wood type' );
+	const s = triageSection( wireframeSection( {
+		missing: [ box( 'icon', 20, 20, 16, 16 ), box( 'icon', 20, 60, 16, 16 ), box( 'icon', 20, 100, 16, 16 ), box( 'icon', 20, 140, 24, 24 ) ],
+		extra: [ ...Array.from( { length: 20 }, ( _, i ) => badge( i ) ), box( 'text', 68, 400, 87, 15, 'brand' ) ],
+	} ), null, DEFAULTS );
+	assert.deepEqual( s.defects.map( ( d ) => [ d.issue, d.count, d.summary ] ), [
+		[ 'missing', 3, 'missing icon 16×16 at 20,20 and 2 more like it' ],
+		[ 'missing', 1, 'missing icon 24×24 at 20,140' ],
+		[ 'extra', 20, 'extra text 87×15 at 68,207 "wood type" and 19 more like it' ],
+		[ 'extra', 1, 'extra text 87×15 at 68,400 "brand"' ],
+	] );
+	assert.deepEqual( s.defects[ 0 ].figma, box( 'icon', 20, 20, 16, 16 ), 'the first stands for the rest, without the count inside it' );
 } );
 
 test( 'layout defects name the values on both sides and belong to the developer', () => {
@@ -173,6 +283,22 @@ test( 'layout defects name the values on both sides and belong to the developer'
 test( 'copy defects carry both texts', () => {
 	const s = triageSection( wireframeSection( { copy: [ { figma: box( 'text', 0, 0, 80, 20, 'company' ), page: box( 'text', 0, 0, 90, 20, 'subject *' ) } ] } ), null, DEFAULTS );
 	assert.equal( s.defects[ 0 ].summary, 'copy "company" → "subject *"' );
+	// Every card's placeholder brand replaced by the same real one is one defect (shop at 375: 48 of them).
+	const brand = ( y, page ) => ( { figma: box( 'text', 148, y, 80, 20, 'brand name' ), page: box( 'text', 148, y, 60, 20, page ) } );
+	const cards = triageSection( wireframeSection( { copy: [ brand( 100, 'charter' ), brand( 200, 'charter' ), brand( 300, 'charter' ), brand( 400, 'arauco' ) ] } ), null, DEFAULTS );
+	assert.deepEqual( cards.defects.map( ( d ) => [ d.count, d.summary ] ), [ [ 3, 'copy "brand name" → "charter" and 2 more like it' ], [ 1, 'copy "brand name" → "arauco"' ] ] );
+	assert.deepEqual( cards.defects[ 0 ].figma, box( 'text', 148, 100, 80, 20, 'brand name' ) );
+	// Two paragraphs that read the same in their first 28 characters are told apart by their hash.
+	const para = ( y, hash, pageHash ) => ( { figma: { ...box( 'text', 20, y, 600, 80, 'nisi ut mauris mauris erat m' ), hash }, page: { ...box( 'text', 20, y, 600, 80, 'nisi ut mauris mauris erat m' ), hash: pageHash } } );
+	const paras = triageSection( wireframeSection( { copy: [ para( 100, 'f1', 'p1' ), para( 300, 'f2', 'p2' ), para( 500, 'f1', 'p1' ) ] } ), null, DEFAULTS );
+	assert.deepEqual( paras.defects.map( ( d ) => d.count ), [ 2, 1 ] );
+	assert.equal( paras.defects[ 0 ].figma.hash, 'f1', 'the hash is carried for the reader too' );
+	const alike = triageSection( wireframeSection( { extra: [ { ...box( 'text', 20, 100, 600, 80, 'nisi ut mauris mauris erat m' ), hash: 'a' }, { ...box( 'text', 20, 300, 600, 80, 'nisi ut mauris mauris erat m' ), hash: 'b' } ] } ), null, DEFAULTS );
+	assert.equal( alike.defects.length, 2, 'extra texts alike only in their first characters stay apart' );
+	// Reports keep a text's first 28 characters: two texts can read the same there and differ after.
+	const prefix = 'massa vel sapien pellentesqu';
+	const same = triageSection( wireframeSection( { copy: [ { figma: box( 'text', 0, 0, 80, 20, prefix ), page: box( 'text', 0, 0, 90, 20, prefix ) } ] } ), null, DEFAULTS );
+	assert.equal( same.defects[ 0 ].summary, 'copy "massa vel sapien pellentesqu…" differs after its first 28 characters' );
 } );
 
 test( 'a live section compares its template, not what the posts put in it', () => {
@@ -276,7 +402,7 @@ function sampleReport() {
 
 test( 'a triage report with every kind of defect matches triage.schema.json', async () => {
 	const report = sampleReport();
-	assert.deepEqual( report.sections.map( ( s ) => s.verdict ), [ 'ok', 'content', 'visual', 'dynamic' ] );
+	assert.deepEqual( report.sections.map( ( s ) => s.verdict ), [ 'ok', 'content', 'minor', 'dynamic' ] );
 	assert.deepEqual( [ ...new Set( report.sections[ 1 ].defects.map( ( d ) => d.issue ) ) ], [ 'missing', 'copy', 'shifted', 'height', 'resized', 'aspect', 'spacing', 'style' ] );
 	report.previous = '2026-09-25_120000';
 	report.metricsDelta = metricsDelta( report.metrics, report.metrics );
@@ -299,9 +425,10 @@ test( 'the schema rejects a defect without the values its issue needs', async ()
 test( 'metrics count what is correct and who owns what is left', () => {
 	const { metrics, sections } = sampleReport();
 	const defects = sections.flatMap( ( sec ) => sec.defects );
-	// 5 Figma sections, one masked: hero is the only correct one of the 4 expected.
-	assert.equal( metrics.correctness, 0.25 );
-	assert.deepEqual( metrics.sections, { figma: 5, page: 4, paired: 4, ok: 1, dynamic: 1, withDefects: 2, missing: 1, extra: 0 } );
+	// 5 Figma sections, one masked: of the 4 expected, hero is exact and the pixels-only one minor.
+	assert.equal( metrics.correctness, 0.5 );
+	assert.equal( metrics.exact, 0.25 );
+	assert.deepEqual( metrics.sections, { figma: 5, page: 4, paired: 4, ok: 1, minor: 1, dynamic: 1, withDefects: 1, missing: 1, extra: 0 } );
 	assert.equal( metrics.defects.total, defects.length + 1 );
 	assert.equal( metrics.defects.byKind.structure, 1 );
 	assert.equal( metrics.defects.byOwner.developer, defects.filter( ( d ) => 'developer' === d.owner ).length );
@@ -316,20 +443,59 @@ test( 'metrics compare with the previous run and accumulate in metrics.jsonl', (
 	before.defects.total += 3;
 	before.defects.byOwner.page += 3;
 	before.scores.pixel = 0.65;
-	assert.deepEqual( metricsDelta( now.metrics, before ), { correctness: 0.25, defects: -3, pageDefects: -3, developerDefects: 0, wireframe: 0, pixel: 0.05 } );
+	assert.deepEqual( metricsDelta( now.metrics, before ), { correctness: 0.5, exact: 0, defects: -3, pageDefects: -3, developerDefects: 0, wireframe: 0, pixel: 0.05 } );
 
 	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-metrics-' ) );
 	appendHistory( dir, '2026-09-25_120000', now );
-	appendHistory( dir, '2026-09-25_130000', now );
+	appendHistory( dir, '2026-09-25_130000', { ...now, figma: { hash: 'abc123def456', sections: [ 'Hero' ], nodeId: '12:34' } } );
 	const lines = fs.readFileSync( path.join( dir, 'metrics.jsonl' ), 'utf8' ).trim().split( '\n' ).map( ( l ) => JSON.parse( l ) );
 	assert.deepEqual( lines.map( ( l ) => l.run ), [ '2026-09-25_120000', '2026-09-25_130000' ] );
-	assert.equal( lines[ 0 ].correctness, 0.25 );
+	assert.equal( lines[ 0 ].correctness, 0.5 );
+	assert.deepEqual( [ lines[ 1 ].figma, lines[ 1 ].nodeId ], [ 'abc123def456', '12:34' ], 'the Figma inputs tell variants apart in the history' );
 	fs.rmSync( dir, { recursive: true } );
+} );
+
+test( 'a run is compared with the newest earlier run of the same URL and Figma inputs that compared a section', () => {
+	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-previous-' ) );
+	const write = ( run, triage ) => {
+		fs.mkdirSync( path.join( dir, run ) );
+		fs.writeFileSync( path.join( dir, run, 'triage.json' ), JSON.stringify( triage ) );
+	};
+	const url = 'https://site.test/block-demo-cover/';
+	const one = [ { index: 1 } ];
+	write( '2026-10-06_100000', { url, figma: { hash: 'wood00000000', sections: [ 'wood' ] }, sections: one } );
+	write( '2026-10-06_110000', { url, figma: { hash: 'brand0000000', sections: [ 'brands' ] }, sections: one } );
+	write( '2026-10-06_120000', { url, figma: { hash: 'wood00000000', sections: [ 'wood' ] }, sections: [] } ); // paired nothing
+	write( '2026-10-06_130000', { url: `${ url }?per_page=24`, figma: { hash: 'wood00000000', sections: [ 'wood' ] }, sections: one } );
+	const wood = { url, figma: { hash: 'wood00000000', sections: [ 'wood' ] } };
+	assert.equal( path.basename( previousRun( dir, path.join( dir, '2026-10-06_140000' ), wood ).dir ), '2026-10-06_100000', 'the brands run and the empty run are skipped, and so is another URL' );
+	assert.equal( path.basename( previousRun( dir, path.join( dir, '2026-10-06_140000' ), { url, figma: { hash: 'brand0000000' } } ).dir ), '2026-10-06_110000' );
+	assert.equal( previousRun( dir, path.join( dir, '2026-10-06_140000' ), { url, figma: { hash: 'other0000000' } } ), null, 'a first run against a variant has nothing to compare with' );
+	assert.equal( previousRun( dir, path.join( dir, '2026-10-06_140000' ), { url, figma: { hash: 'wood00000000', nodeId: '1:2' } } ), null, 'the same boxes from a known node do not match a run that knew none' );
+	write( '2026-10-06_135000', { url, figma: { hash: 'wood00000000', sections: [ 'wood' ], nodeId: '1:3' }, sections: one } );
+	assert.equal( previousRun( dir, path.join( dir, '2026-10-06_140000' ), { url, figma: { hash: 'wood00000000', nodeId: '1:2' } } ), null, 'nor one from another node' );
+	write( '2026-10-06_090000', { url, sections: one } ); // from before inputs were recorded
+	assert.equal( path.basename( previousRun( dir, path.join( dir, '2026-10-06_095000' ), { url, figma: { hash: 'other0000000' } } ).dir ), '2026-10-06_090000', 'older runs match on the URL alone' );
+	assert.equal( previousRun( dir, path.join( dir, '2026-10-06_090000' ), wood ), null, 'only earlier runs count' );
+	fs.rmSync( dir, { recursive: true } );
+	assert.equal( previousRun( path.join( dir, 'gone' ), 'x', wood ), null );
 } );
 
 test( 'a section Figma draws empty only scores 1 if the page adds nothing', () => {
 	assert.equal( sectionScore( [], { pairs: [], extra: [] } ), 1 );
 	assert.equal( sectionScore( [], { pairs: [], extra: [ { type: 'text', x: 0, y: 0, w: 10, h: 10 } ] } ), 0 );
+} );
+
+test( 'a page background Figma paints as the frame fill does not count against the score', () => {
+	// form-cta at 375: 23 of 29 elements matched, and a 375×1201 background image with no Figma box.
+	const f = { type: 'text', x: 20, y: 20, w: 200, h: 40 };
+	const match = { pairs: [ { f, p: f, overlap: 1 } ], extra: [ { type: 'image', x: 0, y: 0, w: 375, h: 1201 } ] };
+	assert.ok( sectionScore( [ f ], match ) < 0.05, 'without the section size the background is an extra like any other' );
+	assert.equal( sectionScore( [ f ], match, { w: 375, h: 1201 } ), 1 );
+	const small = { ...match, extra: [ { type: 'image', x: 0, y: 0, w: 200, h: 200 } ] };
+	assert.ok( sectionScore( [ f ], small, { w: 375, h: 1201 } ) < 0.2, 'an image that is not a background still counts' );
+	const paragraph = { ...match, extra: [ { type: 'text', x: 0, y: 0, w: 375, h: 1201, text: 'lorem' } ] };
+	assert.ok( sectionScore( [ f ], paragraph, { w: 375, h: 1201 } ) < 0.05, 'a text the size of the section is content, not a background' );
 } );
 
 test( 'triage reports a missing --url before trying to use it', () => {
@@ -374,6 +540,27 @@ test( 'the extractor reproduces, from REST data, what it produced inside Figma f
 	const node = JSON.parse( fs.readFileSync( path.join( here, 'fixtures', 'rest-section.json' ), 'utf8' ) );
 	const expected = fs.readFileSync( path.join( here, 'fixtures', 'rest-section.expected.txt' ), 'utf8' ).trim();
 	assert.equal( extract( node ), expected );
+} );
+
+test( 'a frame too large for use_figma comes back in parts that join into the whole file', async () => {
+	// 400 text boxes of multi-byte copy: one use_figma result would pass its 20 KB cut.
+	const text = ( i ) => ( { id: `t${ i }`, type: 'TEXT', visible: true, characters: `段落 ${ i } のテキストはここに続きます、長いページ`, absoluteBoundingBox: { x: 10, y: i * 20, width: 200, height: 18 } } );
+	const frame = { id: '1:2', type: 'FRAME', visible: true, absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 8000 }, children: [
+		{ id: '1:3', type: 'FRAME', name: 'Body', visible: true, absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 8000 }, children: Array.from( { length: 400 }, ( _, i ) => text( i ) ) },
+	] };
+	const AsyncFunction = Object.getPrototypeOf( async () => {} ).constructor;
+	const run = ( part ) => new AsyncFunction( 'figma', execFileSync( process.execPath, [ path.join( here, '..', 'scripts', 'config.js' ), 'figma-boxes', '1:2', '--part', String( part ) ], { encoding: 'utf8' } ) )( { getNodeByIdAsync: async () => frame } );
+
+	const first = await run( 0 );
+	const parts = Number( first.split( '\n' ).at( -1 ).split( '|' )[ 2 ] );
+	assert.ok( parts > 1 );
+	const outputs = [ first ];
+	for ( let i = 1; i < parts; i++ ) {
+		outputs.push( await run( i ) );
+	}
+	assert.ok( outputs.every( ( o ) => Buffer.byteLength( o ) <= 20000 ) );
+	assert.match( await run( parts ), /^No part/ );
+	assert.equal( outputs.join( '\n' ).split( '\n' ).filter( ( l ) => ! l.startsWith( 'P|' ) ).join( '\n' ), extractBoxes( frame, { ignore: DEFAULT_CONFIG.figmaIgnore } ) );
 } );
 
 test( 'section mode treats the node as one section, via REST and in Figma', async () => {
@@ -1016,9 +1203,20 @@ test( 'the review page shows each diagnosis with its evidence, escaped', async (
 		}
 	}
 	assert.ok( html.includes( 'data-filter="disagree"' ) );
+	assert.ok( html.includes( "url('wireframe/01-hero.png')" ), 'without the run folder, overlays are linked' );
+	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-report-' ) );
+	for ( const kind of [ 'wireframe', 'pixel' ] ) {
+		fs.mkdirSync( path.join( dir, kind ) );
+		fs.writeFileSync( path.join( dir, kind, '01-hero.png' ), `${ kind } bytes` );
+	}
+	const embedded = renderReport( report, '2026-09-25_120000', dir );
+	for ( const kind of [ 'wireframe', 'pixel' ] ) {
+		const dataUrl = `url(data:image/png;base64,${ Buffer.from( `${ kind } bytes` ).toString( 'base64' ) })`;
+		assert.equal( embedded.split( dataUrl ).length - 1, 1, `the ${ kind } overlay is embedded once, whatever cuts from it` );
+	}
+	assert.ok( ! embedded.includes( '01-hero.png' ), 'a complete report links no file of the run' );
 	assert.ok( html.includes( 'font size<div class="muted">text “who &lt;we&gt; work with”</div>' ), 'a style defect names its token and element' );
 	assert.ok( html.includes( '28px' ) && html.includes( '24px' ), 'with units' );
-	assert.ok( html.includes( 'src="wireframe/01-hero.png"' ), 'overlays link relative to the run folder' );
 } );
 
 test( 'a text layer alone in a vertically padded auto-layout frame takes its padding as margins; other text has none', () => {

@@ -460,12 +460,17 @@ export function trustCopy( match, anchors, figmaHeight, pageHeight, t ) {
  * @param {Object} match matchBoxes() result.
  * @return {number} Score in [0, 1].
  */
-export function sectionScore( fig, match ) {
+export function sectionScore( fig, match, section = null ) {
 	const area = ( b ) => b.w * b.h;
 	const figArea = fig.reduce( ( s, b ) => s + area( b ), 0 );
-	const extraArea = match.extra.reduce( ( s, b ) => s + area( b ), 0 );
+	// A page background with no Figma box (Figma paints it as the frame's fill) covers the
+	// section, and would outweigh everything matched; it isn't content on either side.
+	// Covering the section where it is, not merely as large: a big photo hanging off one side is content.
+	const covers = ( b ) => Math.min( b.x + b.w, section.w ) - Math.max( b.x, 0 ) >= BACKGROUND_SHARE * section.w && Math.min( b.y + b.h, section.h ) - Math.max( b.y, 0 ) >= BACKGROUND_SHARE * section.h;
+	const extra = match.extra.filter( ( b ) => ! section || ! [ 'image', 'surface' ].includes( b.type ) || ! covers( b ) );
+	const extraArea = extra.reduce( ( s, b ) => s + area( b ), 0 );
 	if ( ! figArea ) {
-		return match.extra.length ? 0 : 1;
+		return extra.length ? 0 : 1;
 	}
 	return match.pairs.reduce( ( s, m ) => s + m.overlap * area( m.f ), 0 ) / ( figArea + extraArea );
 }
@@ -507,8 +512,9 @@ export function paddingOf( boxes, width, height ) {
  * @return {{type: string, x: number, y: number, w: number, h: number, text?: string}}
  */
 export function element( b ) {
-	const { type, x, y, w, h, text } = b;
-	return 'text' === type ? { type, x, y, w, h, text } : { type, x, y, w, h };
+	const { type, x, y, w, h, text, hash } = b;
+	// The hash is of the whole copy; the text is its first characters, so two texts can share it.
+	return 'text' === type ? { type, x, y, w, h, text, ...( hash ? { hash } : {} ) } : { type, x, y, w, h };
 }
 
 /**
@@ -1030,7 +1036,7 @@ export function analyseSection( figma, page, { tolerance: t, sizeTolerance = t, 
 	const hiddenFill = ( m ) => 'surface' === m.f.type && covered( m.f, fig ) && covered( m.p, pageBoxes );
 	return {
 		match,
-		score: sectionScore( fig, match ),
+		score: sectionScore( fig, match, { w: width, h: page.height } ),
 		structural: missing,
 		missing: missing.map( element ),
 		extra: match.extra.filter( inPageTemplate ).map( element ),

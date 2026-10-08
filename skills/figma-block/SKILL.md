@@ -50,8 +50,10 @@ Done when the build and lint pass and `discover` shows the block with its fields
 ## 4. Demo page
 
 A page titled `Block Demo: <Block Title>` holding only the new block, filled with the Figma
-copy and images imported with `mcps-media-import`. Publish it on a dev site (the diff loads it
-anonymously). On later runs, find it with `mcps-post-search` and update it by `post_id`.
+copy and images imported with `mcps-media-import`. Fill every slot the Figma variant shows
+(a video, an optional link, a badge): an empty slot is reported as missing content. Publish
+it on a dev site (the diff loads it anonymously). On later runs, find it with
+`mcps-post-search` and update it by `post_id`.
 
 Done when the demo page loads at its URL.
 
@@ -60,6 +62,12 @@ Done when the demo page loads at its URL.
 Run **figma-visual-diff** on the demo page against the *section* node, once per breakpoint, in
 single-section mode (`--section`). Here `layout` defects are yours: fix padding, spacing and
 sizes in the stylesheet, and re-run.
+
+Read a `spacing` defect at the section's top or bottom edge with care: on the page that edge
+space is the theme's spacing between blocks plus the block's own padding, while the Figma
+component shows only the block's own (the page frame carries the space between sections).
+Compare the block's own padding with Figma's and leave the theme's alone; the diff can't
+tell the two apart, and no fixed number can, since blocks override it.
 
 Done when each breakpoint passes, or every remaining defect has a stated reason (font
 rendering, placeholder photos).

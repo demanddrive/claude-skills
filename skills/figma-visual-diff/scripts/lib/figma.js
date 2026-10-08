@@ -19,6 +19,8 @@
  *   L|<section>|x|y|w|h                         a line the section draws, section-relative:
  *                                              any stroke's side, a LINE, a thin fill or a
  *                                              tight shadow, whatever it belongs to
+ *   P|<part>|<parts>                           ends one part of a file use_figma returned in
+ *                                              parts (see pagePart); joined, they are the file
  *
  * Box types are text, image, icon and surface. The style field holds design tokens as
  * key=value pairs separated by semicolons: text has font, size, lh (line-height, px), weight
@@ -440,21 +442,75 @@ export function extractBoxes( frame, { ignore, section } ) {
 	].join( '\n' );
 }
 
+/** use_figma cuts its result at 20 KB; the margin leaves room for the P line. */
+export const PART_BYTES = 19000;
+
+/**
+ * One part of figma-boxes.txt, small enough for use_figma to return whole. Parts split at
+ * line boundaries; a file that fits in one part comes back unchanged. Runs inside Figma
+ * (printed by figmaScript), so it counts UTF-8 bytes by hand rather than with TextEncoder.
+ *
+ * @param {string} text The whole file.
+ * @param {number} part Zero-based part to return.
+ * @return {string} That part, ending with P|<part>|<parts> when there are several.
+ */
+export function pagePart( text, part ) {
+	const bytes = ( s ) => {
+		let n = 0;
+		for ( const c of s ) {
+			const code = c.codePointAt( 0 );
+			if ( code < 0x80 ) {
+				n += 1;
+			} else if ( code < 0x800 ) {
+				n += 2;
+			} else if ( code < 0x10000 ) {
+				n += 3;
+			} else {
+				n += 4;
+			}
+		}
+		return n;
+	};
+	const parts = [ [] ];
+	let size = 0;
+	for ( const line of text.split( '\n' ) ) {
+		const n = bytes( line ) + 1;
+		if ( n > PART_BYTES ) {
+			throw new Error( `A line is too long for one use_figma result; shorten this layer name: ${ line.slice( 0, 80 ) }` );
+		}
+		if ( size + n > PART_BYTES && parts[ parts.length - 1 ].length ) {
+			parts.push( [] );
+			size = 0;
+		}
+		parts[ parts.length - 1 ].push( line );
+		size += n;
+	}
+	if ( 1 === parts.length && 0 === part ) {
+		return text;
+	}
+	if ( part >= parts.length ) {
+		return `No part ${ part }: this frame has ${ parts.length }.`;
+	}
+	return [ ...parts[ part ], `P|${ part }|${ parts.length }` ].join( '\n' );
+}
+
 /**
  * The script for the Figma MCP's use_figma tool: extractBoxes() on one node, read-only.
  * Run it unchanged and save the returned string verbatim as figma-boxes.txt.
  *
  * @param {string}  nodeId  Node id, as in the URL (16233-18647) or Figma's form (16233:18647).
- * @param {Object}  options Extraction options, as for extractBoxes().
+ * @param {Object}  options Extraction options, as for extractBoxes(), plus part (default 0).
  * @return {string} JavaScript for use_figma.
  */
-export function figmaScript( nodeId, { ignore, section } ) {
+export function figmaScript( nodeId, { ignore, section, part = 0 } ) {
 	return [
 		`const TEXT_PREFIX = ${ TEXT_PREFIX };`,
 		`const normText = ${ normText };`,
 		`const hash = ${ hash };`,
 		`const extractBoxes = ${ extractBoxes };`,
-		`return extractBoxes( await figma.getNodeByIdAsync( ${ JSON.stringify( nodeId.replace( '-', ':' ) ) } ), ${ JSON.stringify( { ignore, section } ) } );`,
+		`const PART_BYTES = ${ PART_BYTES };`,
+		`const pagePart = ${ pagePart };`,
+		`return pagePart( extractBoxes( await figma.getNodeByIdAsync( ${ JSON.stringify( nodeId.replace( '-', ':' ) ) } ), ${ JSON.stringify( { ignore, section } ) } ), ${ part } );`,
 	].join( '\n' );
 }
 

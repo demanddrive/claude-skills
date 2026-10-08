@@ -211,7 +211,8 @@ async function main() {
 	fs.writeFileSync( path.join( args.out, 'page-boxes.json' ), JSON.stringify( page, null, '\t' ) );
 
 	const { pairs, byOrder, missing, extra, moved } = pairStructure( figma.sections, page );
-	const warnings = byOrder ? [ 'Section names did not match Figma, so sections were paired by position. Set sectionMap or slugPatterns in .figma-visual-diff.json.' ] : [];
+	// One section each pairs the same either way: nothing to warn about.
+	const warnings = byOrder && figma.sections.length > 1 ? [ 'Section names did not match Figma, so sections were paired by position. Set sectionMap or slugPatterns in .figma-visual-diff.json.' ] : [];
 	const results = pairs.map( ( [ i, j ] ) => compareSectionPair( args, i, figma.sections[ i ], page[ j ], lists ) );
 
 	const compared = results.filter( ( r ) => undefined !== r.score );
