@@ -45,6 +45,24 @@ fields must appear with the intended types. A block that takes inner blocks decl
 (e.g. `allowed_blocks` in an ACF block's `block.json`); otherwise the schema treats it as a
 leaf.
 
+The theme's tokens are the system, and the editor is the product:
+
+- **Tokens only.** Colours, spacing and type come from the theme's CSS variables and presets.
+  A raw value goes only in the block's stylesheet, only for a Figma variable the theme has no
+  token for (step 2), and the report lists it; inner blocks' content never carries one.
+- **A Figma colour the token doesn't match.** When the block uses the right variable and the
+  colour still differs from Figma, judge how far the mismatch reaches. Only this block's use
+  of it differs: override that one colour in the block's stylesheet. The token's value differs
+  wherever the design uses it: fix the token itself (`theme.json`, the CSS variables), once,
+  for every block.
+- **Editor controls over fixed styles.** Where the Figma variants or instances differ in a
+  heading's level, a font size or a colour, give the editor that control (the inner heading's
+  level, `supports.typography.fontSize`, `supports.color`) rather than fixing one value in CSS.
+  After building, check `discover` lists the controls the design needs; it is what page builds
+  and edits can set.
+- **ACF fields are full width.** Leave every field's wrapper width empty (100%): since
+  WordPress 7.0 the fields sit in the narrow block sidebar, where side-by-side fields break.
+
 Done when the build and lint pass and `discover` shows the block with its fields.
 
 ## 4. Demo page

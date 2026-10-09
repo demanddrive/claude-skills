@@ -75,7 +75,10 @@ obvious edits go ahead directly.
 1. Build from the catalog `discover` returned. It defines every block name, each block's
    `attrs.data` shape, and the `x-mcps` placement rules (`topLevelAllowedBlocks` per post type,
    `allowedChildren`, `postTypes`, `multiple`, `innerBlockLimit`). Recall from an earlier
-   session goes stale as the theme changes.
+   session goes stale as the theme changes. A block's attributes there are its **editor
+   controls** (a heading's `level`, a `fontSize` preset, `theme`, `align`, spacing): set a look
+   through them. Content carries no inline style, hex colour or px value, since an editor can't
+   see or maintain it; a look no control gives belongs to the block's code, so report it.
 2. Find the post. `mcps-post-search` finds an ID by keyword or title, and `get` also accepts
    `post_title` with `post_type`.
 3. `get` returns `blocks` in the shape `set` accepts, and an `issues` list. A storage code in
