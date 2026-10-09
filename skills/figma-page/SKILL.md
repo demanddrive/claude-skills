@@ -113,6 +113,12 @@ MCP server:
   alignment, spacing, font-size preset, any field in the block's schema.
 - **Content**: the number of items or cards, copy, images, links.
 
+Settings are the block's **editor controls**: its attributes in the `discover` catalog (a
+heading's `level`, a `fontSize` preset, `theme`, alignment, spacing) and the fields in its
+schema. Inner blocks' content carries no custom colour or spacing value (an inline style, a hex
+colour, a px margin): an editor can't see or maintain it, and the next theme change misses it.
+A defect no editor control fixes is a developer defect.
+
 Several defects in one section often share one setting: cards resized, shifted and a doubled
 section height are a column count. Fix the cause and re-run. An empty JavaScript-rendered
 block is usually the build (a bundle mangled by a cache or minify plugin): check the browser
