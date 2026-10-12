@@ -16,7 +16,7 @@
  * that side. triage.schema.json describes each defect's fields.
  */
 
-import { ASPECT_TOLERANCE, aspectChange, describe, MAX_OFFSETS, sameToken } from './boxes.js';
+import { ASPECT_TOLERANCE, aspectChange, describe, inside, MAX_OFFSETS, sameToken } from './boxes.js';
 import { signedPx as sign } from './cli.js';
 
 export const SEVERITY = [ 'structure', 'content', 'alignment', 'layout', 'visual' ];
@@ -155,6 +155,10 @@ export function sectionDefects( w, p, args ) {
 		const scale = sizes.get( at( o.figma ) );
 		return scale && Math.abs( o.page.w - o.figma.w * scale ) <= args.tolerance && Math.abs( o.page.h - o.figma.h * scale ) <= args.tolerance;
 	};
+	// A box sized by its text (a tag, a button) grows by as much as its new copy does, which the
+	// copy defect already reports, to the page's owner: blaming the build would count it twice.
+	const holdsNewCopy = ( o ) => ( w.copy || [] ).some( ( c ) => inside( c.figma, o.figma ) && inside( c.page, o.page ) &&
+		Math.abs( o.dw - ( c.page.w - c.figma.w ) ) <= args.sizeTolerance && Math.abs( o.dh - ( c.page.h - c.figma.h ) ) <= args.sizeTolerance );
 	// Elements of a different size, largest offsets first (the wireframe report keeps a dozen):
 	// each is a size to fix, in a section that passes too (logos a size up keep its score).
 	// Elements that only moved are left out; they mostly follow from something above them
@@ -162,7 +166,7 @@ export function sectionDefects( w, p, args ) {
 	for ( const o of w.offsets ) {
 		// Wrapped text carries its layout box whether or not that changed; only a changed one is its own defect.
 		const sameLayoutBox = ! o.textBox || Math.abs( o.textBox.page - o.textBox.figma ) <= args.tolerance;
-		if ( 'text' === o.figma.type && sameLayoutBox && boxFollowsSize( o ) ) {
+		if ( ( 'text' === o.figma.type && sameLayoutBox && boxFollowsSize( o ) ) || ( 'surface' === o.figma.type && holdsNewCopy( o ) ) ) {
 			continue;
 		}
 		// A text's box follows its font's metrics, so it keeps the wider tolerance; a box's
