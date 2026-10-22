@@ -596,7 +596,7 @@ export function extractPageBoxes( detect, cfg ) {
 					part.selectNodeContents( n );
 					return [ ...part.getClientRects() ];
 				} ).filter( ( q ) => q.width > 0 && q.height > 0 ).map( ( q ) => {
-					const grow = lineHeight > q.height ? ( lineHeight - q.height ) / 2 : 0;
+					const grow = Number.isFinite( lineHeight ) ? ( lineHeight - q.height ) / 2 : 0;
 					return { left: q.left, right: q.right, top: q.top - grow, bottom: q.bottom + grow };
 				} );
 				if ( rects.length ) {
@@ -614,11 +614,11 @@ export function extractPageBoxes( detect, cfg ) {
 			if ( ! textDone && el.textContent.trim() && inlineOnly( el ) ) {
 				const range = document.createRange();
 				range.selectNodeContents( el );
-				// Range rects are glyph boxes; Figma measures text by its line boxes. Grow each
-				// line to the line-height around its glyphs, as the browser lays the line out.
+				// Range rects are glyph boxes; Figma measures text by its line boxes. Fit each
+				// line to the line-height around its glyphs (tight leading shrinks it), as the browser lays it out.
 				const lineHeight = parseFloat( cs.lineHeight );
 				const rects = [ ...range.getClientRects() ].filter( ( q ) => q.width > 0 && q.height > 0 ).map( ( q ) => {
-					const grow = lineHeight > q.height ? ( lineHeight - q.height ) / 2 : 0;
+					const grow = Number.isFinite( lineHeight ) ? ( lineHeight - q.height ) / 2 : 0;
 					return { left: q.left, right: q.right, top: q.top - grow, bottom: q.bottom + grow };
 				} );
 				if ( rects.length ) {

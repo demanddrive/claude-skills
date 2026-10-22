@@ -160,6 +160,24 @@ test( 'what a boxless or zero-size wrapper holds is still extracted', { skip: ! 
 	}
 } );
 
+test( 'text with leading tighter than its glyphs is as tall as its line boxes, as Figma measures it', { skip: ! chromium && 'Playwright Chromium not installed' }, async () => {
+	const browser = await chromium.launch( { executablePath } );
+	try {
+		const page = await browser.newPage( { viewport: { width: 800, height: 600 } } );
+		await page.setContent( `<style>
+			body { margin: 0 } h2, p { margin: 0; width: 300px; font-size: 64px; line-height: 1.05 }
+		</style>
+		<main><section class="block-stats"><h2>$90M+ in revenue</h2><p>60+ brands<br><span>matched</span></p></section></main>` );
+		const [ section ] = await evaluateWithSections( page, extractPageBoxes, DEFAULT_CONFIG );
+		const heights = await page.evaluate( () => [ 'h2', 'p' ].map( ( s ) => document.querySelector( s ).getBoundingClientRect().height ) );
+		const texts = section.boxes.filter( ( b ) => 'text' === b.type );
+		assert.equal( texts.length, 2, JSON.stringify( texts ) );
+		texts.forEach( ( b, i ) => assert.ok( Math.abs( b.h - heights[ i ] ) <= 1, `${ b.text }: ${ b.h }px tall, its line boxes ${ heights[ i ] }px` ) );
+	} finally {
+		await browser.close();
+	}
+} );
+
 test( 'text records its CSS margins, so padding is measured the same whether or not the theme drops the last margin', { skip: ! chromium && 'Playwright Chromium not installed' }, async () => {
 	const browser = await chromium.launch( { executablePath } );
 	try {

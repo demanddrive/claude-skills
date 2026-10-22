@@ -398,7 +398,11 @@ export function extractBoxes( frame, { ignore, section } ) {
 		}
 		if ( hasImage( n ) && b ) {
 			add( s, 'image', b.x, b.y, b.width, b.height, clip, undefined, undefined, imageStyle( n, b, clippers ) );
-			return;
+			// A frame filled with a photo (a card, a section's background) still holds its
+			// content, as the page's background-image element does (see extractPageBoxes).
+			if ( ! ( prop( n, 'children' ) || [] ).length ) {
+				return;
+			}
 		}
 		const surface = filled( n ) || stroked( n );
 		if ( b && ( VECTORS.includes( n.type ) || ( /icon/i.test( n.name ) && b.width <= ICON_MAX && b.height <= ICON_MAX && ! surface ) ) ) {

@@ -37,7 +37,7 @@ const resizedBy = ( m, t, size ) => {
 };
 
 /** Whether box `o` lies within box `b`, give or take 2px of rounding. */
-const inside = ( o, b ) => o.x >= b.x - 2 && o.y >= b.y - 2 && o.x + o.w <= b.x + b.w + 2 && o.y + o.h <= b.y + b.h + 2;
+export const inside = ( o, b ) => o.x >= b.x - 2 && o.y >= b.y - 2 && o.x + o.w <= b.x + b.w + 2 && o.y + o.h <= b.y + b.h + 2;
 
 /** Whether a box covers most of its section (`c`) both ways: its background, not content. */
 const background = ( b, c ) => b.w >= BACKGROUND_SHARE * c.w && b.h >= BACKGROUND_SHARE * c.h;
