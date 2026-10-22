@@ -540,9 +540,16 @@ export function figmaSlug( name, config = {} ) {
  * @throws {Error} When the file holds no frame or sections.
  */
 export function parseFigma( file, config ) {
+	const lines = fs.readFileSync( file, 'utf8' ).split( '\n' );
+	// A frame use_figma returned in parts is whole only with every part, once, in order.
+	const parts = lines.filter( ( l ) => l.startsWith( 'P|' ) ).map( ( l ) => l.split( '|' ).slice( 1 ).map( Number ) );
+	const total = parts[ 0 ]?.[ 1 ] ?? 0;
+	if ( parts.length !== total || parts.some( ( [ p, n ], i ) => p !== i || n !== total ) ) {
+		throw new Error( `${ file } holds parts ${ parts.map( ( [ p ] ) => p ).join( ', ' ) } of ${ total }; fetch every part with --part and join them in order.` );
+	}
 	const frame = {};
 	const sections = [];
-	for ( const line of fs.readFileSync( file, 'utf8' ).split( '\n' ) ) {
+	for ( const line of lines ) {
 		const f = line.split( '|' );
 		if ( 'F' === f[ 0 ] ) {
 			frame.width = Number( f[ 1 ] );

@@ -1015,6 +1015,22 @@ test( 'arguments: a flag without its value, or a bad number, is an error rather 
 	assert.throws( () => parseFlags( [ '--url', 'https://site.test/' ], rules ), /Missing --width/ );
 } );
 
+test( 'a figma-boxes file missing a part, or with one out of order, is refused', () => {
+	const dir = fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-parts-' ) );
+	const whole = fs.readFileSync( path.join( here, 'fixtures', 'figma-boxes.txt' ), 'utf8' ).trimEnd().split( '\n' );
+	const at = Math.ceil( whole.length / 2 );
+	const part = ( i, n = 2 ) => [ ...( i ? whole.slice( at ) : whole.slice( 0, at ) ), `P|${ i }|${ n }` ].join( '\n' );
+	const read = ( name, text ) => {
+		const file = path.join( dir, name );
+		fs.writeFileSync( file, text );
+		return () => parseFigma( file, DEFAULT_CONFIG );
+	};
+	assert.equal( read( 'joined.txt', [ part( 0 ), part( 1 ) ].join( '\n' ) )().sections.length, 2 );
+	assert.throws( read( 'first-only.txt', part( 0 ) ), /holds parts 0 of 2; fetch every part/ );
+	assert.throws( read( 'swapped.txt', [ part( 1 ), part( 0 ) ].join( '\n' ) ), /holds parts 1, 0 of 2/ );
+	assert.throws( read( 'mixed-totals.txt', [ part( 0, 3 ), part( 1 ) ].join( '\n' ) ), /of 3/ );
+} );
+
 test( 'a Figma layer name containing "|" still reads back as one section', () => {
 	const frame = { absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 200 }, children: [ { name: 'Hero | Desktop', type: 'FRAME', absoluteBoundingBox: { x: 0, y: 0, width: 1440, height: 200 }, children: [] } ] };
 	const file = path.join( fs.mkdtempSync( path.join( os.tmpdir(), 'fvd-pipe-' ) ), 'figma-boxes.txt' );
