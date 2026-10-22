@@ -1,6 +1,6 @@
 ---
 name: figma-block
-description: "Code a new block from a Figma section, show it on a demo page through the site's MCP server, and score its look with figma-visual-diff. Use when a Figma section has no matching block, or when asked to build a block from Figma."
+description: "Instructions for coding one new block from a Figma section, showing it on a demo page through the site's MCP server, and scoring its look with figma-visual-diff. Preloaded into the figma-block-builder agent, which figma-blocks spawns: use figma-blocks to build blocks."
 argument-hint: "<figma-section-url> [mobile section url] [block name]"
 ---
 

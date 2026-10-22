@@ -1,6 +1,6 @@
 ---
 name: figma-page
-description: "Build a WordPress page from a Figma design out of the site's existing blocks, through the site's MCP server, then diff it against the design and fix its content. Use when asked to build, implement or post a page from a Figma URL."
+description: "Instructions for building one WordPress page from a Figma design out of the site's existing blocks, through the site's MCP server, then diffing it against the design and fixing its content. Preloaded into the figma-page-builder agent, which figma-pages spawns: use figma-pages to build pages."
 argument-hint: "<figma-section-url | figma-frame-url [frame url per breakpoint]> [page title]"
 ---
 
