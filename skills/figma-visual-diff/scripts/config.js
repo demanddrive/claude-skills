@@ -23,10 +23,11 @@
  * same format; the project file overrides it.
  *
  * CLI:
- *   node config.js figma-boxes <frame-id> [--section]
+ *   node config.js figma-boxes <frame-id> [--section] [--part <n>]
  *                                             the Figma extractor for use_figma (see lib/figma.js), with
  *                                             this project's ignore pattern; --section treats the node
- *                                             as one section (a single block)
+ *                                             as one section (a single block); --part picks which part
+ *                                             of a large frame's output to return (default 0)
  *   node config.js runs-dir <page-url> <width> [runs-root]  folder for this page and breakpoint's Figma files and runs
  *   node config.js setup                         install npm dependencies (if missing) and Playwright's Chromium
  */
@@ -47,6 +48,9 @@ export const DEFAULT_CONFIG = {
 	figmaIgnore: '^(Navigation|Footer|Header|Wireframe Filter)\\b',
 	mask: [],
 	live: [ 'post-slider' ],
+	// Elements a scroll-animation library hides until scrolled to, beyond the ones known to
+	// lib/browser.js (AOS, WOW, sal.js, Animate.css): shown for the capture.
+	reveal: [],
 	iconClassPattern: '(^|\\s)icon-',
 	// Jev provider: null is OpenCode Zen (see lib/jev.js).
 	jev: null,
@@ -178,8 +182,14 @@ if ( isMain( import.meta.url ) ) {
 	}
 	const nodeId = rest[ 0 ];
 	if ( 'figma-boxes' !== command || ! nodeId ) {
-		console.error( 'Usage: node config.js figma-boxes <frame-id> [--section] | node config.js runs-dir <page-url> <width> | node config.js setup' );
+		console.error( 'Usage: node config.js figma-boxes <frame-id> [--section] [--part <n>] | node config.js runs-dir <page-url> <width> | node config.js setup' );
 		process.exit( 2 );
 	}
-	process.stdout.write( figmaScript( nodeId, { ignore: loadConfig().figmaIgnore, section: rest.includes( '--section' ) } ) );
+	const partAt = rest.indexOf( '--part' );
+	const part = -1 === partAt ? 0 : Number( rest[ partAt + 1 ] );
+	if ( ! Number.isInteger( part ) || part < 0 ) {
+		console.error( '--part takes a part number: 0, 1, 2, ...' );
+		process.exit( 2 );
+	}
+	process.stdout.write( figmaScript( nodeId, { ignore: loadConfig().figmaIgnore, section: rest.includes( '--section' ), part } ) );
 }

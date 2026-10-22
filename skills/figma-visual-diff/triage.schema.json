@@ -23,7 +23,18 @@
 			"items": { "$ref": "#/$defs/section" }
 		},
 		"metrics": { "$ref": "#/$defs/metrics" },
-		"previous": { "type": "string", "description": "The earlier run this one is compared with (a folder name)." },
+		"figma": {
+			"description": "The Figma inputs compared: the boxes file by content, so runs against another variant or state of the design aren't compared with this one.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": [ "hash", "sections" ],
+			"properties": {
+				"hash": { "type": "string", "description": "First 12 hex digits of the SHA-1 of figma-boxes.txt." },
+				"sections": { "type": "array", "items": { "type": "string" }, "description": "The Figma sections' names, in order." },
+				"nodeId": { "type": "string", "description": "The Figma node, when the run knew it (--node-id, or the boxes file named for it)." }
+			}
+		},
+		"previous": { "type": "string", "description": "The earlier run this one is compared with (a folder name): the newest with the same URL and Figma inputs that compared a section." },
 		"metricsDelta": {
 			"description": "This run's headline metrics minus the previous run's. Positive correctness and scores, and negative defect counts, are progress.",
 			"type": "object",
@@ -31,6 +42,7 @@
 			"required": [ "correctness", "defects", "pageDefects", "developerDefects", "wireframe", "pixel" ],
 			"properties": {
 				"correctness": { "type": "number" },
+				"exact": { "type": "number" },
 				"defects": { "type": "integer" },
 				"pageDefects": { "type": "integer" },
 				"developerDefects": { "type": "integer" },
@@ -64,7 +76,8 @@
 			"additionalProperties": false,
 			"required": [ "correctness", "sections", "defects", "scores" ],
 			"properties": {
-				"correctness": { "$ref": "#/$defs/ratio", "description": "Share of Figma sections that are on the page with no defects. Missing sections count against it; masked (dynamic) sections are left out. 1 is a correct build." },
+				"correctness": { "$ref": "#/$defs/ratio", "description": "Share of Figma sections that are on the page with no defects or only minor ones. Missing sections count against it; masked (dynamic) sections are left out. 1 is a correct build." },
+				"exact": { "$ref": "#/$defs/ratio", "description": "Share of Figma sections on the page with no defect at all (correctness before the minor tier)." },
 				"sections": {
 					"type": "object",
 					"additionalProperties": false,
@@ -73,7 +86,8 @@
 						"figma": { "$ref": "#/$defs/count", "description": "Sections in the Figma frame." },
 						"page": { "$ref": "#/$defs/count", "description": "Sections found on the page." },
 						"paired": { "$ref": "#/$defs/count", "description": "Figma sections matched to a page section." },
-						"ok": { "$ref": "#/$defs/count" },
+						"ok": { "$ref": "#/$defs/count", "description": "Sections with no defect." },
+						"minor": { "$ref": "#/$defs/count", "description": "Sections whose every defect is minor." },
 						"dynamic": { "$ref": "#/$defs/count" },
 						"withDefects": { "$ref": "#/$defs/count" },
 						"missing": { "$ref": "#/$defs/count", "description": "Figma sections with no page section." },
@@ -156,7 +170,8 @@
 				"y": { "type": "number" },
 				"w": { "type": "number" },
 				"h": { "type": "number" },
-				"text": { "type": "string", "description": "A text box's copy, normalised and cut to its first 28 characters." }
+				"text": { "type": "string", "description": "A text box's copy, normalised and cut to its first 28 characters." },
+				"hash": { "type": "string", "description": "A hash of the text box's whole copy, which tells apart texts that read the same in `text`." }
 			}
 		},
 		"rect": {
@@ -202,17 +217,17 @@
 			"oneOf": [
 				{
 					"description": "A Figma element with no page counterpart.",
-					"properties": { "kind": { "const": "content" }, "issue": { "const": "missing" }, "figma": { "$ref": "#/$defs/element" } },
+					"properties": { "kind": { "const": "content" }, "issue": { "const": "missing" }, "figma": { "$ref": "#/$defs/element" }, "count": { "type": "integer", "minimum": 1, "description": "Elements alike (type, size, words) this one stands for." } },
 					"required": [ "figma" ]
 				},
 				{
 					"description": "A page element Figma doesn't have.",
-					"properties": { "kind": { "const": "content" }, "issue": { "const": "extra" }, "page": { "$ref": "#/$defs/element" } },
+					"properties": { "kind": { "const": "content" }, "issue": { "const": "extra" }, "page": { "$ref": "#/$defs/element" }, "count": { "type": "integer", "minimum": 1, "description": "Elements alike (type, size, words) this one stands for." } },
 					"required": [ "page" ]
 				},
 				{
 					"description": "Paired text boxes whose copy differs.",
-					"properties": { "kind": { "const": "content" }, "issue": { "const": "copy" }, "figma": { "$ref": "#/$defs/element" }, "page": { "$ref": "#/$defs/element" } },
+					"properties": { "kind": { "const": "content" }, "issue": { "const": "copy" }, "figma": { "$ref": "#/$defs/element" }, "page": { "$ref": "#/$defs/element" }, "count": { "type": "integer", "minimum": 1, "description": "Texts with the same words changed the same way that this one stands for." } },
 					"required": [ "figma", "page" ]
 				},
 				{
@@ -318,7 +333,7 @@
 				"index": { "type": "integer", "description": "1-based position in Figma." },
 				"slug": { "type": "string", "description": "The block slug, e.g. content-media-split." },
 				"figma": { "type": "string", "description": "The Figma layer name." },
-				"verdict": { "enum": [ "ok", "dynamic", "content", "alignment", "layout", "visual" ], "description": "The most severe defect kind; dynamic: a masked section, only its presence is checked." },
+				"verdict": { "enum": [ "ok", "minor", "dynamic", "content", "alignment", "layout", "visual" ], "description": "The most severe defect kind; minor: every defect is small (a layout delta within twice its tolerance, a style a step away, pixels alone); dynamic: a masked section, only its presence is checked." },
 				"live": { "type": "boolean", "description": "Shows live posts: only its template is compared, not text, what's sized by it, item counts or height." },
 				"wireframeScore": { "type": "number" },
 				"pixelScore": { "type": "number" },
@@ -352,7 +367,7 @@
 				"defects": { "type": "array", "items": { "$ref": "#/$defs/defect" } },
 				"diagnosis": { "$ref": "#/$defs/diagnosis" },
 				"images": {
-					"description": "Overlay images, relative to the run folder.",
+					"description": "Overlay images, relative to the run folder; report.html embeds them.",
 					"type": "object",
 					"additionalProperties": false,
 					"properties": {

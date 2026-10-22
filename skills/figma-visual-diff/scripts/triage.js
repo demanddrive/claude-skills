@@ -28,6 +28,7 @@
  * Exits 0 when every section is ok or dynamic.
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -142,25 +143,62 @@ export function pruneRuns( dir, keep ) {
 }
 
 /** The most recent earlier run in the same folder, if any. */
-function previousRun( runsDir, current ) {
+/**
+ * What this run compared against: the Figma boxes file by content, its section names, and
+ * the node id when known. A page folder holds runs against every variant and state of a
+ * design, so a run is only comparable with one that had the same inputs.
+ *
+ * @param {Object} args Parsed arguments, with figma (the stored boxes file) and its source.
+ * @return {{hash: string, sections: string[], nodeId?: string}}
+ */
+export function figmaIdentity( args ) {
+	const text = fs.readFileSync( args.figma, 'utf8' );
+	// The MCP route names the temp file for its frame (SKILL.md): figma-boxes-<node-id>.txt.
+	const fromFile = /figma-boxes-(\d+)-(\d+)/.exec( path.basename( args.figmaSource || '' ) );
+	const nodeId = args.nodeId?.replace( '-', ':' ) ?? ( fromFile ? `${ fromFile[ 1 ] }:${ fromFile[ 2 ] }` : undefined );
+	return {
+		hash: crypto.createHash( 'sha1' ).update( text ).digest( 'hex' ).slice( 0, 12 ),
+		sections: text.split( '\n' ).filter( ( l ) => l.startsWith( 'S|' ) ).map( ( l ) => l.split( '|' )[ 2 ] ),
+		...( nodeId ? { nodeId } : {} ),
+	};
+}
+
+/**
+ * The newest earlier run to compare this one with: the same URL and the same Figma inputs,
+ * that compared at least one section. Runs from before inputs were recorded match on the URL.
+ *
+ * @param {string} runsDir Page/breakpoint runs folder.
+ * @param {string} current This run's folder.
+ * @param {Object} inputs  { url, figma: figmaIdentity() }.
+ * @return {{dir: string, triage: Object}|null} The run and its triage.json.
+ */
+export function previousRun( runsDir, current, { url, figma } ) {
 	if ( ! runsDir || ! fs.existsSync( runsDir ) ) {
 		return null;
 	}
 	const earlier = fs.readdirSync( runsDir )
-		.filter( ( d ) => RUN_DIR.test( d ) && d < path.basename( current ) && fs.existsSync( path.join( runsDir, d, 'triage.json' ) ) )
-		.sort();
-	return earlier.length ? path.join( runsDir, earlier[ earlier.length - 1 ] ) : null;
+		.filter( ( d ) => RUN_DIR.test( d ) && d < path.basename( current ) )
+		.sort()
+		.reverse();
+	for ( const d of earlier ) {
+		let triage;
+		try {
+			triage = JSON.parse( fs.readFileSync( path.join( runsDir, d, 'triage.json' ), 'utf8' ) );
+		} catch {
+			continue;
+		}
+		// The same boxes from another node (a duplicated frame) is another design to track; a run
+		// that knew no node id only matches one that didn't either.
+		const sameNode = triage.figma?.nodeId === figma.nodeId;
+		if ( triage.url === url && triage.sections?.length && ( ! triage.figma || ( triage.figma.hash === figma.hash && sameNode ) ) ) {
+			return { dir: path.join( runsDir, d ), triage };
+		}
+	}
+	return null;
 }
 
-/** An earlier run's triage.json, or null (with a warning) when it can't be read. */
-function readPrevious( dir, warnings ) {
-	try {
-		return JSON.parse( fs.readFileSync( path.join( dir, 'triage.json' ), 'utf8' ) );
-	} catch ( error ) {
-		warnings.push( `previous run ${ path.basename( dir ) } couldn't be read, so nothing is compared with it: ${ error.message }` );
-		return null;
-	}
-}
+/** Sections whose content sits this much further across than in the run before moved with the capture, not the build. */
+const X_ORIGIN_JUMP = 8;
 
 async function runDiff( script, argv ) {
 	try {
@@ -204,7 +242,7 @@ export function triageSection( w, p, args ) {
 		index: w.index,
 		slug: w.slug,
 		figma: w.figma,
-		verdict: verdictOf( w, defects ),
+		verdict: verdictOf( w, defects, args ),
 		live: Boolean( w.live ),
 		wireframeScore: w.score,
 		pixelScore: p?.score,
@@ -299,21 +337,33 @@ async function main() {
 		url: args.url,
 		width: Number( args.width ),
 		pass: ! unstable && ! structure.length && sections.every( ( s ) => 'ok' === s.verdict || 'dynamic' === s.verdict ),
+		figma: figmaIdentity( args ),
 		structure,
 		sections,
 	};
+	const previous = previousRun( args.runsDir, args.out, report );
+	const before = previous?.triage;
+	const beforeByIndex = new Map( ( before?.sections ?? [] ).map( ( s ) => [ s.index, s ] ) );
+	if ( before ) {
+		// The same page and design, captured again: a section whose content now sits further
+		// across was measured from another x-origin, and its alignment and spacing defects say so.
+		for ( const s of sections ) {
+			const b = beforeByIndex.get( s.index );
+			const jump = s.drift && b?.drift && b.slug === s.slug ? Math.abs( s.drift.dx - b.drift.dx ) : 0;
+			if ( jump >= X_ORIGIN_JUMP ) {
+				report.warnings.push( `Section #${ s.index } ${ s.slug }: its content sits ${ s.drift.dx }px across from Figma, ${ b.drift.dx }px in run ${ path.basename( previous.dir ) } with the same inputs. Either the page's layout changed or the capture's x-origin did; run again before fixing its alignment and spacing defects.` );
+			}
+		}
+	}
 	const jev = args.noJev ? null : jevEndpoint( loadConfig( args.config ).jev, process.env, args.jevModel );
 	if ( jev?.key ) {
 		report.warnings.push( ...await diagnose( report, jev ) );
 	}
 	report.metrics = buildMetrics( report, wireframe, pixel );
-	const previous = previousRun( args.runsDir, args.out );
-	const before = previous && readPrevious( previous, report.warnings );
 	if ( before ) {
-		const byIndex = new Map( before.sections.map( ( s ) => [ s.index, s ] ) );
-		report.previous = path.basename( previous );
+		report.previous = path.basename( previous.dir );
 		report.changes = sections
-			.map( ( s ) => ( { index: s.index, slug: s.slug, before: byIndex.get( s.index )?.verdict, after: s.verdict } ) )
+			.map( ( s ) => ( { index: s.index, slug: s.slug, before: beforeByIndex.get( s.index )?.verdict, after: s.verdict } ) )
 			.filter( ( c ) => c.before !== c.after );
 		// Runs from before metrics existed have none to compare with.
 		if ( before.metrics ) {
@@ -322,8 +372,9 @@ async function main() {
 	}
 	await validateReport( report );
 	fs.writeFileSync( path.join( args.out, 'triage.json' ), JSON.stringify( report, null, '\t' ) );
-	fs.writeFileSync( path.join( args.out, 'report.html' ), renderReport( report, path.basename( args.out ) ) );
-	if ( args.runsDir ) {
+	fs.writeFileSync( path.join( args.out, 'report.html' ), renderReport( report, path.basename( args.out ), args.out ) );
+	// A run that compared nothing (no section paired) has no scores worth a place in the history.
+	if ( args.runsDir && sections.length ) {
 		appendHistory( args.runsDir, path.basename( args.out ), report );
 	}
 	if ( args.runsDir ) {
@@ -344,7 +395,7 @@ async function main() {
 
 	const m = report.metrics;
 	const pc = ( n ) => `${ ( n * 100 ).toFixed( 1 ) }%`;
-	console.log( `${ report.pass ? 'PASS' : 'FAIL' } ${ report.width }px  correctness ${ pc( m.correctness ) } (${ m.sections.ok }/${ m.sections.figma - m.sections.dynamic } sections ok)  wireframe ${ pc( m.scores.wireframe ) }  pixels ${ pc( m.scores.pixel ) }` );
+	console.log( `${ report.pass ? 'PASS' : 'FAIL' } ${ report.width }px  correctness ${ pc( m.correctness ) } (${ m.sections.ok + m.sections.minor }/${ m.sections.figma - m.sections.dynamic } sections ok or minor, ${ m.sections.ok } exact)  wireframe ${ pc( m.scores.wireframe ) }  pixels ${ pc( m.scores.pixel ) }` );
 	if ( m.diagnosis ) {
 		console.log( `  jev ${ m.diagnosis.model }: expected correctness ${ pc( m.diagnosis.expectedCorrectness ) }, ${ m.diagnosis.signedOff } signed off, ${ m.diagnosis.needsReview } to review, ${ m.diagnosis.rejected } rejected; ${ m.diagnosis.expectedFixes } fixes expected, ${ m.diagnosis.negligible } defects negligible` );
 	} else if ( jev && ! jev.key ) {
@@ -377,6 +428,12 @@ async function main() {
 	const pruned = args.runsDir && args.keep ? pruneRuns( args.runsDir, Number( args.keep ) ) : [];
 	if ( pruned.length ) {
 		console.log( `  pruned ${ pruned.length } older run(s), keeping the newest ${ args.keep }` );
+	}
+	if ( ! sections.length ) {
+		console.log( '  nothing compared (no section paired): not added to metrics.jsonl' );
+	}
+	if ( ! report.previous && args.runsDir ) {
+		console.log( `  first run of ${ report.figma.nodeId ? `Figma node ${ report.figma.nodeId }` : 'these Figma inputs' } against this URL: nothing to compare with` );
 	}
 	if ( report.previous ) {
 		const changes = report.changes.map( ( c ) => `#${ c.index } ${ c.slug } ${ c.before || 'new' } → ${ c.after }` ).join( ', ' );

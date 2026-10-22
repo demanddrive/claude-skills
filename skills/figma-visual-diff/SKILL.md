@@ -39,6 +39,17 @@ With `FIGMA_TOKEN` set (a read-only personal access token), pass `--file-key <ke
    `use_figma` unchanged (it is read-only), and save the returned string **verbatim** to a
    temp file named for its frame, `/tmp/figma-boxes-<node-id>.txt` (`:` as `-`): exactly as
    returned, however long. Page agents running side by side each write their own frames.
+
+   `use_figma` cuts results at 20 KB, so a large frame comes back in parts: the last line is
+   then `P|0|<parts>`. Save that result as `/tmp/figma-boxes-<node-id>.part0.txt`, print and
+   run the extractor again with `--part 1`, `--part 2` and so on up to `<parts> - 1`, saving
+   each the same way, then join them in order:
+
+   ```bash
+   awk 1 /tmp/figma-boxes-<node-id>.part{0..<last>}.txt > /tmp/figma-boxes-<node-id>.txt
+   ```
+
+   Never fetch elements in chunks of your own or rebuild the file from the session log.
 2. `get_screenshot` with `maxDimension` set to the frame height (the `F|width|height` line)
    rounded up. Keep the returned image URL.
 

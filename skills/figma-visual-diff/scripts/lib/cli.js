@@ -2,6 +2,7 @@
  * Command-line arguments, shared by the scripts.
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -94,5 +95,16 @@ export const sectionImage = ( i, slug ) => `${ String( i + 1 ).padStart( 2, '0' 
  * @return {boolean}
  */
 export function isMain( metaUrl ) {
-	return Boolean( process.argv[ 1 ] ) && fileURLToPath( metaUrl ) === path.resolve( process.argv[ 1 ] );
+	if ( ! process.argv[ 1 ] ) {
+		return false;
+	}
+	// Node resolves a module's URL through symlinks but leaves argv as typed, so a script run
+	// from a symlinked install (the skill linked into ~/.claude/skills) would never be main.
+	let script = path.resolve( process.argv[ 1 ] );
+	try {
+		script = fs.realpathSync( script );
+	} catch {
+		// Not a file (e.g. `node --eval`): compare as given.
+	}
+	return fileURLToPath( metaUrl ) === script;
 }
